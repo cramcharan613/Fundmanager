@@ -18,7 +18,7 @@ def create_snowflake_session():
     conn_params = {
         'account': os.getenv(   'ACCOUNT'),
         'user': os.getenv( 'USER'),
-        'password': os.getenv(  'PASSWORD'),
+        "AUTHENTICATOR": "externalbrowser",
         'warehouse': os.getenv( 'WAREHOUSE'),
         'database': os.getenv(  'DATABASE'),
         'schema': os.getenv(    'SCHEMA')
@@ -272,7 +272,7 @@ def main():
     )
 
     selected_rows = grid_response['selected_rows']
-    if not selected_rows:
+    if len(selected_rows) == 0:
         st.write("No ETFs selected.")
     else:
         st.write("Selected ETFs:")
