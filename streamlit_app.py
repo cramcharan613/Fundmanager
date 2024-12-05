@@ -17,7 +17,7 @@ def create_snowflake_session():
     load_dotenv()
     conn_params = {
         'account': os.getenv(   'ACCOUNT'),
-        'User': os.getenv( 'USER'),
+        'user': os.getenv( 'USER'),
         'password': os.getenv(  'PASSWORD'),
         'warehouse': os.getenv( 'WAREHOUSE'),
         'database': os.getenv(  'DATABASE'),
