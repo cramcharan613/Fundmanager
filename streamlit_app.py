@@ -7,7 +7,7 @@ import pandas as pd
 from functools import lru_cache
 
 load_dotenv()
-
+st.connection('snowflake')
 @st.cache_data(ttl=3600)
 def load_data(_session):
     return _session.table("FINANCE.STRAT_PARTNERS.ETF_MAPPING").to_pandas()
@@ -26,7 +26,8 @@ def create_snowflake_session():
     if not all(conn_params.values()):
         st.error("Error: Missing one or more environment variables for Snowflake connection.")
         return None
-    return Session.builder.configs(conn_params).create()
+    return st.connection('snowflake')
+#Session.builder.configs(conn_params).create()
 
 def configure_grid(df):
     gb = GridOptionsBuilder.from_dataframe(df)
