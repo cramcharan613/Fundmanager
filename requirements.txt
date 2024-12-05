@@ -1,1 +1,5 @@
 streamlit
+numpy
+snowflake-snowpark-python
+python-dotenv
+streamlit-aggrid
