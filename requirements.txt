@@ -9,3 +9,4 @@ playwright
 openpyxl
 xlsxwriter
 aiohttp
+bs4
