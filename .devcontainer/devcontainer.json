@@ -18,7 +18,11 @@
   },
   "updateContentCommand": [
     "echo 'Installing system dependencies for Playwright...'",
-    "sudo apt-get update && sudo apt-get install -y wget ca-certificates fonts-liberation libappindicator3-1 libnss3 libx11-xcb1 libxtst6 xdg-utils libgbm1 libdrm2 libxkbcommon0 libasound2",
+    "sudo apt-get update && sudo apt-get install -y wget ca-certificates fonts-liberation libappindicator3-1 libasound2 \
+    libatk-bridge2.0-0 libatk1.0-0 libatspi2.0-0 libcups2 libdbus-1-3 libdrm2 libgbm1 libgtk-3-0 libnspr4 libnss3 \
+    libxcomposite1 libxdamage1 libxfixes3 libxkbcommon0 libxrandr2 xdg-utils libxslt1.1 libwoff2dec1 libevent-2.1 \
+    libopus libflite libwebpdemux libharfbuzz-icu libwebpmux libenchant-2 libsecret-1 libhyphen libmanette-0.2 \
+    libEGL libgudev-1.0 libGLESv2 libx264",
     "echo 'Installing Python dependencies...'",
     "pip3 install --user -r requirements.txt",
     "pip3 install --user streamlit",
