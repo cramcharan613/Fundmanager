@@ -1,5 +1,11 @@
 streamlit
 numpy
-snowflake-snowpark-python
 python-dotenv
 streamlit-aggrid
+pandas
+requests
+urllib3
+playwright
+openpyxl
+io 
+xlsxwriter
