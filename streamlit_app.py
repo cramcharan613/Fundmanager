@@ -16,7 +16,9 @@ import re
 import aiohttp
 from playwright.async_api import async_playwright
 
-os.system('playwright install-deps')
+# Ensure that browser dependencies are installed only once
+if not os.path.exists('/usr/bin/google-chrome'):
+    os.system('playwright install-deps')
 os.system('playwright install')
 
 logging.basicConfig(
@@ -35,7 +37,8 @@ class ETFDataFetcher:
             "aum+close+holdings+price+cusip+isin+etfCategory+"
             "expenseRatio+etfIndex+etfRegion+etfCountry+optionable.json"
         )
-        self.etfdb_url = "https://etfdb.com/api/screener/"
+        # Removed trailing slash since direct navigation might fail
+        self.etfdb_url = "https://etfdb.com"  
 
     async def get_dynamic_headers(self, url: str) -> Dict:
         try:
@@ -51,6 +54,7 @@ class ETFDataFetcher:
                 )
                 page = await context.new_page()
                 headers = {}
+
                 async def handle_response(response):
                     if response.url == url:
                         h = await response.all_headers()
@@ -70,6 +74,7 @@ class ETFDataFetcher:
                             'Sec-Fetch-User': '?1',
                             'Cache-Control': 'max-age=0'
                         })
+
                 page.on('response', handle_response)
                 try:
                     await page.goto(url, wait_until='networkidle', timeout=30000)
@@ -121,23 +126,38 @@ class ETFDataFetcher:
                     )
                     page = await context.new_page()
                     await page.set_extra_http_headers(headers)
-                    response_data = None
+
+                    # If it's a direct fetch endpoint (API), we can skip page.goto() on it
+                    # Instead, navigate to a known valid HTML page of the same domain
+                    base_url = re.match(r"(https://[^/]+)", url)
+                    if base_url:
+                        base_url = base_url.group(1)
+                    else:
+                        base_url = "https://etfdb.com"
+
+                    # Navigate to the base URL once
+                    await page.goto(base_url, wait_until='networkidle', timeout=30000)
+
+                    # Use fetch inside page.evaluate to get the response data
                     if method.upper() == "GET":
-                        response = await page.goto(url, wait_until='networkidle', timeout=30000)
-                        if response:
-                            response_data = await response.text()
-                    elif method.upper() == "POST":
-                        await page.goto(url)
-                        if payload:
-                            response_data = await page.evaluate(f'''
-                                fetch("{url}", {{
-                                    method: "POST",
-                                    headers: {json.dumps(headers)},
-                                    body: {json.dumps(payload)}
-                                }}).then(response => response.text())
-                            ''')
+                        response_data = await page.evaluate(f'''
+                            fetch("{url}", {{
+                                method: "GET",
+                                headers: {json.dumps(headers)}
+                            }}).then(response => response.text())
+                        ''')
+                    else:
+                        response_data = await page.evaluate(f'''
+                            fetch("{url}", {{
+                                method: "{method.upper()}",
+                                headers: {json.dumps(headers)},
+                                body: {json.dumps(payload) if payload else "null"}
+                            }}).then(response => response.text())
+                        ''')
+
                     await context.close()
                     await browser.close()
+
                     if response_data:
                         return json.loads(response_data)
             except Exception as e:
@@ -211,6 +231,8 @@ class ETFDataFetcher:
         import json
         all_data = []
         max_pages = 56
+        # etfdb_url is the base domain now
+        api_endpoint = "https://etfdb.com/api/screener"
         try:
             async with async_playwright() as p:
                 browser = await p.chromium.launch(
@@ -223,14 +245,16 @@ class ETFDataFetcher:
                     locale='en-US'
                 )
                 page = await context.new_page()
+                # First, go to the main page to establish domain context
+                await page.goto(self.etfdb_url, wait_until='networkidle', timeout=30000)
                 headers = await self.get_dynamic_headers(self.etfdb_url)
-                await page.set_extra_http_headers(headers)
+
                 for page_num in range(1, max_pages + 1):
                     try:
                         payload = {"active_or_passive": "Active", "page": page_num}
-                        await page.goto(self.etfdb_url)
+                        # Fetch data directly using evaluate and fetch
                         result = await page.evaluate(f'''
-                            fetch("{self.etfdb_url}", {{
+                            fetch("{api_endpoint}", {{
                                 method: "POST",
                                 headers: {json.dumps(headers)},
                                 body: {json.dumps(payload)}
@@ -288,7 +312,7 @@ class ETFDataFetcher:
         return self.merge_data(stockanalysis_df, etfdb_df)
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data()
 def load_data_sync() -> pd.DataFrame:
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
