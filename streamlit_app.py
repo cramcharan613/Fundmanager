@@ -18,7 +18,6 @@ os.system('playwright install-deps')
 os.system('playwright install')
 
 
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -43,8 +42,9 @@ class ETFDataFetcher:
             "expenseRatio+etfIndex+etfRegion+etfCountry+optionable.json"
         )
         self.etfdb_url = "https://etfdb.com/api/screener/"
-        self.session = requests.Session()
-    def get_dynamic_headers(self, url: str) -> Dict:    
+        self.session = aiohttp.ClientSession()
+
+    async def get_dynamic_headers(self, url: str) -> Dict:
         """Get dynamic headers by simulating real browser behavior using Playwright.
         
         Args:
@@ -54,26 +54,26 @@ class ETFDataFetcher:
             Dict: Dictionary containing the captured headers
         """
         try:
-            with sync_playwright() as p:
+            async with async_playwright() as p:
                 # Launch browser with specific configurations
-                browser = p.chromium.launch(
+                browser = await p.chromium.launch(
                     headless=True,
                     args=['--no-sandbox', '--disable-setuid-sandbox']
                 )
                 
                 # Create a new context with specific device and browser parameters
-                context = browser.new_context(
+                context = await browser.new_context(
                     viewport={'width': 1920, 'height': 1080},
                     user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                     locale='en-US'
                 )
                 
                 # Create new page and set up request/response handling
-                page = context.new_page()
+                page = await context.new_page()
                 headers = {}
                 
                 # Set up response handling
-                def handle_response(response):
+                async def handle_response(response):
                     if response.url == url:
                         # Capture response headers
                         headers.update(response.headers)
@@ -98,26 +98,26 @@ class ETFDataFetcher:
     
                 # Navigate to URL with timeout and wait until network is idle
                 try:
-                    page.goto(
+                    await page.goto(
                         url,
                         wait_until='networkidle',
                         timeout=30000
                     )
                     
                     # Wait for any dynamic content
-                    page.wait_for_load_state('domcontentloaded')
-                    page.wait_for_load_state('networkidle')
+                    await page.wait_for_load_state('domcontentloaded')
+                    await page.wait_for_load_state('networkidle')
                     
                     # Allow some time for any delayed requests
-                    page.wait_for_timeout(2000)
+                    await asyncio.sleep(2)
                     
                 except Exception as e:
                     logger.warning(f"Navigation warning: {str(e)}")
                     # Continue even if timeout occurs - we might have gotten some headers
                     
                 # Clean up
-                context.close()
-                browser.close()
+                await context.close()
+                await browser.close()
                 
                 # Remove any None or empty values
                 headers = {k: v for k, v in headers.items() if v is not None and v != ''}
@@ -135,59 +135,60 @@ class ETFDataFetcher:
     
         except Exception as e:
             logger.error(f"Error in Playwright browser interaction: {str(e)}")
-                # Return basic headers in case of error
+            # Return basic headers in case of error
             return {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                    'Accept-Language': 'en-US,en;q=0.5'
-                }
-    def make_request(
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5'
+            }
+
+    async def make_request(
         self,
         url: str,
         method: str = "GET",
         headers: Optional[Dict] = None,
         payload: Optional[Dict] = None,
         verify: bool = True
-    ) -> Optional[requests.Response]:
+    ) -> Optional[aiohttp.ClientResponse]:
         """Make an HTTP request with enhanced error handling and Playwright support."""
         if headers is None:
-            headers = self.get_dynamic_headers(url)
+            headers = await self.get_dynamic_headers(url)
 
         max_retries = 3
         retry_delay = 1
         
         for attempt in range(max_retries):
             try:
-                with sync_playwright() as p:
-                    browser = p.chromium.launch(
+                async with async_playwright() as p:
+                    browser = await p.chromium.launch(
                         headless=True,
                         args=['--no-sandbox', '--disable-setuid-sandbox']
                     )
                     
-                    context = browser.new_context(
+                    context = await browser.new_context(
                         viewport={'width': 1920, 'height': 1080},
                         user_agent=headers.get('User-Agent'),
                         locale='en-US'
                     )
                     
-                    page = context.new_page()
+                    page = await context.new_page()
                     
                     # Set headers
-                    page.set_extra_http_headers(headers)
+                    await page.set_extra_http_headers(headers)
                     
                     response_data = None
                     if method.upper() == "GET":
-                        response = page.goto(
+                        response = await page.goto(
                             url,
                             wait_until='networkidle',
                             timeout=30000
                         )
                         if response:
-                            response_data = response.text()
+                            response_data = await response.text()
                     elif method.upper() == "POST":
-                        response = page.goto(url)
+                        response = await page.goto(url)
                         if payload:
-                            response = page.evaluate(f'''
+                            response = await page.evaluate(f'''
                                 fetch("{url}", {{
                                     method: "POST",
                                     headers: {json.dumps(headers)},
@@ -207,13 +208,13 @@ class ETFDataFetcher:
                             
                         def raise_for_status(self):
                             if not (200 <= self.status_code < 300):
-                                raise requests.exceptions.HTTPError(
+                                raise aiohttp.ClientResponseError(
                                     f"HTTP Error: {self.status_code}"
                                 )
                     
                     # Clean up
-                    context.close()
-                    browser.close()
+                    await context.close()
+                    await browser.close()
                     
                     if response_data:
                         return PlaywrightResponse(response_data, 200)
@@ -223,13 +224,12 @@ class ETFDataFetcher:
                     f"Request failed (attempt {attempt + 1}/{max_retries}): {str(e)}"
                 )
                 if attempt < max_retries - 1:
-                    time.sleep(retry_delay)
+                    await asyncio.sleep(retry_delay)
                     retry_delay *= 2
                 else:
                     logger.error(f"Max retries reached for URL: {url}")
                     return None
         return None
-
 
     def preprocess_numeric_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """Preprocess numeric columns in the dataframe."""
@@ -252,12 +252,12 @@ class ETFDataFetcher:
                     )
         return df
 
-    def fetch_stockanalysis_data(self) -> pd.DataFrame:
+    async def fetch_stockanalysis_data(self) -> pd.DataFrame:
         """Fetch and process ETF data from Stock Analysis API using Playwright."""
         try:
-            response = self.make_request(
+            response = await self.make_request(
                 self.stockanalysis_url,
-                headers=self.get_dynamic_headers(self.stockanalysis_url),
+                headers=await self.get_dynamic_headers(self.stockanalysis_url),
                 verify=False
             )
 
@@ -301,76 +301,74 @@ class ETFDataFetcher:
             logger.error(f"Error in Stock Analysis data fetching: {str(e)}")
             return pd.DataFrame()
 
-   
-
-    def fetch_etfdb_data(self) -> pd.DataFrame:
+    async def fetch_etfdb_data(self) -> pd.DataFrame:
         """Fetch ETF data from ETFDB API using Playwright with pagination."""
         import json
         all_data = []
         max_pages = 56  # Adjust based on actual number of pages
         
         try:
-            with sync_playwright() as p:
-             browser = p.chromium.launch(
-                headless=True,
-                args=['--no-sandbox', '--disable-setuid-sandbox']
-            )
-            
-            context = browser.new_context(
-                viewport={'width': 1920, 'height': 1080},
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
-                locale='en-US'
-            )
-            
-            page = context.new_page()
-            headers = self.get_dynamic_headers(self.etfdb_url)
-            page.set_extra_http_headers(headers)
-            
-            for page_num in range(1, max_pages + 1):
-                try:
-                    payload = {"active_or_passive": "Active", "page": page_num}
-                    
-                    # Navigate to page
-                    response = page.goto(self.etfdb_url)
-                    if response:
-                        # Execute POST request via JavaScript
-                        result = page.evaluate(f'''
-                            fetch("{self.etfdb_url}", {{
-                                method: "POST",
-                                headers: {json.dumps(headers)},
-                                body: {json.dumps(payload)}
-                            }}).then(response => response.json())
-                        ''')
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(
+                    headless=True,
+                    args=['--no-sandbox', '--disable-setuid-sandbox']
+                )
+                
+                context = await browser.new_context(
+                    viewport={'width': 1920, 'height': 1080},
+                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    locale='en-US'
+                )
+                
+                page = await context.new_page()
+                headers = await self.get_dynamic_headers(self.etfdb_url)
+                await page.set_extra_http_headers(headers)
+                
+                for page_num in range(1, max_pages + 1):
+                    try:
+                        payload = {"active_or_passive": "Active", "page": page_num}
                         
-                        if result and 'data' in result:
-                            all_data.extend(result['data'])
-                        
-                        # Wait before next request
-                        page.wait_for_timeout(1000)
-                        
-                except Exception as e:
-                    logger.error(
-                        f"Error fetching page {page_num}: {str(e)}"
+                        # Navigate to page
+                        response = await page.goto(self.etfdb_url)
+                        if response:
+                            # Execute POST request via JavaScript
+                            result = await page.evaluate(f'''
+                                fetch("{self.etfdb_url}", {{
+                                    method: "POST",
+                                    headers: {json.dumps(headers)},
+                                    body: {json.dumps(payload)}
+                                }}).then(response => response.json())
+                            ''')
+                            
+                            if result and 'data' in result:
+                                all_data.extend(result['data'])
+                            
+                            # Wait before next request
+                            await asyncio.sleep(1)
+                            
+                    except Exception as e:
+                        logger.error(
+                            f"Error fetching page {page_num}: {str(e)}"
+                        )
+                        continue
+                
+                # Clean up
+                await context.close()
+                await browser.close()
+                
+                if all_data:
+                    etf_df = pd.DataFrame(all_data)
+                    etf_df.loc[:, "symbol"] = etf_df["mobile_title"].apply(
+                        lambda x: x.split(" - ")[0] if isinstance(x, str) else ""
                     )
-                    continue
-            
-            # Clean up
-            context.close()
-            browser.close()
-            
-            if all_data:
-                etf_df = pd.DataFrame(all_data)
-                etf_df.loc[:, "symbol"] = etf_df["mobile_title"].apply(
-                lambda x: x.split(" - ")[0] if isinstance(x, str) else ""
-            )
-                etf_df["Actively Managed"] = "YES"
-            return etf_df[["symbol", "Actively Managed"]]
-            
+                    etf_df["Actively Managed"] = "YES"
+                    return etf_df[["symbol", "Actively Managed"]]
+                
         except Exception as e:
             logger.error(f"Error in ETFDB data fetching: {str(e)}")
     
         return pd.DataFrame(columns=["symbol", "Actively Managed"])
-    
+
     def merge_data(
         self,
         stockanalysis_df: pd.DataFrame,
@@ -410,20 +408,18 @@ class ETFDataFetcher:
 
         return merged_df
 
-    def fetch_and_combine_data(self) -> pd.DataFrame:
+    async def fetch_and_combine_data(self) -> pd.DataFrame:
         """Fetch data from all sources and combine them."""
-        stockanalysis_df = self.fetch_stockanalysis_data()
-        etfdb_df = self.fetch_etfdb_data()
+        stockanalysis_df = await self.fetch_stockanalysis_data()
+        etfdb_df = await self.fetch_etfdb_data()
         return self.merge_data(stockanalysis_df, etfdb_df)
 
-
 @st.cache_data(ttl=3600)
-def load_data() -> pd.DataFrame:
+async def load_data() -> pd.DataFrame:
     """Load ETF data with caching."""
     fetcher = ETFDataFetcher()
-    return fetcher.fetch_and_combine_data()
-
-
+    return await fetcher.fetch_and_combine_data()
+    
 def get_grid_options() -> Dict:
     """Get consolidated grid options configuration."""
     return {
