@@ -744,10 +744,4 @@ def main() -> None:
             logger.error(f"Grid error: {str(e)}")
 
 if __name__ == "__main__":
-    st.set_page_config(
-        layout="wide",
-        page_title="ETF Explorer Pro",
-        page_icon="📈",
-        initial_sidebar_state="expanded"
-    )
     main()
