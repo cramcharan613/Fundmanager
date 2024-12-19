@@ -13,6 +13,11 @@ import json
 import openpyxl
 import io
 import xlsxwriter
+import os
+os.system('playwright install-deps')
+os.system('playwright install')
+
+
 
 # Configure logging
 logging.basicConfig(
