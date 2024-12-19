@@ -1,4 +1,4 @@
-# packages.txt
+
 wget
 ca-certificates
 fonts-liberation
