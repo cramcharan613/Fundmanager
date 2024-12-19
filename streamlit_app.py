@@ -1,3 +1,4 @@
+import asyncio
 from typing import Dict, Optional
 from datetime import datetime
 import logging
@@ -5,37 +6,29 @@ from dotenv import load_dotenv
 import streamlit as st
 from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 import pandas as pd
-import requests
-from urllib3.exceptions import InsecureRequestWarning
-import time
-from playwright.sync_api import sync_playwright
 import json
 import openpyxl
 import io
 import xlsxwriter
 import os
+import time
+import re
+import aiohttp
+from playwright.async_api import async_playwright
+
 os.system('playwright install-deps')
 os.system('playwright install')
 
-
-
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# Disable insecure request warnings
-requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
-
 load_dotenv()
 
 class ETFDataFetcher:
-    """A class to fetch and process ETF data from multiple sources."""
-
     def __init__(self):
-        """Initialize the ETF data fetcher with API endpoints and headers."""
         self.stockanalysis_url = (
             "https://api.stockanalysis.com/api/screener/e/bd/"
             "issuer+n+assetClass+inceptionDate+exchange+etfLeverage+"
@@ -43,42 +36,27 @@ class ETFDataFetcher:
             "expenseRatio+etfIndex+etfRegion+etfCountry+optionable.json"
         )
         self.etfdb_url = "https://etfdb.com/api/screener/"
-        self.session = requests.Session()
-    def get_dynamic_headers(self, url: str) -> Dict:    
-        """Get dynamic headers by simulating real browser behavior using Playwright.
-        
-        Args:
-            url (str): The URL to fetch headers from
-            
-        Returns:
-            Dict: Dictionary containing the captured headers
-        """
+
+    async def get_dynamic_headers(self, url: str) -> Dict:
         try:
-            with sync_playwright() as p:
-                # Launch browser with specific configurations
-                browser = p.chromium.launch(
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(
                     headless=True,
                     args=['--no-sandbox', '--disable-setuid-sandbox']
                 )
-                
-                # Create a new context with specific device and browser parameters
-                context = browser.new_context(
+                context = await browser.new_context(
                     viewport={'width': 1920, 'height': 1080},
                     user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                     locale='en-US'
                 )
-                
-                # Create new page and set up request/response handling
-                page = context.new_page()
+                page = await context.new_page()
                 headers = {}
-                
-                # Set up response handling
-                def handle_response(response):
+                async def handle_response(response):
                     if response.url == url:
-                        # Capture response headers
-                        headers.update(response.headers)
-                        
-                        # Add common headers that might be useful
+                        h = await response.all_headers()
+                        for k, v in h.items():
+                            if v is not None and v != '':
+                                headers[k] = v
                         headers.update({
                             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -92,147 +70,87 @@ class ETFDataFetcher:
                             'Sec-Fetch-User': '?1',
                             'Cache-Control': 'max-age=0'
                         })
-    
-                # Listen for all responses
                 page.on('response', handle_response)
-    
-                # Navigate to URL with timeout and wait until network is idle
                 try:
-                    page.goto(
-                        url,
-                        wait_until='networkidle',
-                        timeout=30000
-                    )
-                    
-                    # Wait for any dynamic content
-                    page.wait_for_load_state('domcontentloaded')
-                    page.wait_for_load_state('networkidle')
-                    
-                    # Allow some time for any delayed requests
-                    page.wait_for_timeout(2000)
-                    
-                except Exception as e:
-                    logger.warning(f"Navigation warning: {str(e)}")
-                    # Continue even if timeout occurs - we might have gotten some headers
-                    
-                # Clean up
-                context.close()
-                browser.close()
-                
-                # Remove any None or empty values
-                headers = {k: v for k, v in headers.items() if v is not None and v != ''}
-                
+                    await page.goto(url, wait_until='networkidle', timeout=30000)
+                    await page.wait_for_load_state('domcontentloaded')
+                    await page.wait_for_load_state('networkidle')
+                    await page.wait_for_timeout(2000)
+                except:
+                    pass
+                await context.close()
+                await browser.close()
                 if not headers:
-                    logger.warning(f"No headers captured for URL: {url}")
-                    # Return default headers if none were captured
                     return {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
                         'Accept-Language': 'en-US,en;q=0.5'
                     }
-                    
                 return headers
-    
-        except Exception as e:
-            logger.error(f"Error in Playwright browser interaction: {str(e)}")
-                # Return basic headers in case of error
+        except:
             return {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                    'Accept-Language': 'en-US,en;q=0.5'
-                }
-    def make_request(
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5'
+            }
+
+    async def make_request(
         self,
         url: str,
         method: str = "GET",
         headers: Optional[Dict] = None,
         payload: Optional[Dict] = None,
-        verify: bool = True
-    ) -> Optional[requests.Response]:
-        """Make an HTTP request with enhanced error handling and Playwright support."""
+    ) -> Optional[dict]:
         if headers is None:
-            headers = self.get_dynamic_headers(url)
+            headers = await self.get_dynamic_headers(url)
 
         max_retries = 3
         retry_delay = 1
-        
+
         for attempt in range(max_retries):
             try:
-                with sync_playwright() as p:
-                    browser = p.chromium.launch(
+                async with async_playwright() as p:
+                    browser = await p.chromium.launch(
                         headless=True,
                         args=['--no-sandbox', '--disable-setuid-sandbox']
                     )
-                    
-                    context = browser.new_context(
+                    context = await browser.new_context(
                         viewport={'width': 1920, 'height': 1080},
-                        user_agent=headers.get('User-Agent'),
+                        user_agent=headers.get('User-Agent', ''),
                         locale='en-US'
                     )
-                    
-                    page = context.new_page()
-                    
-                    # Set headers
-                    page.set_extra_http_headers(headers)
-                    
+                    page = await context.new_page()
+                    await page.set_extra_http_headers(headers)
                     response_data = None
                     if method.upper() == "GET":
-                        response = page.goto(
-                            url,
-                            wait_until='networkidle',
-                            timeout=30000
-                        )
+                        response = await page.goto(url, wait_until='networkidle', timeout=30000)
                         if response:
-                            response_data = response.text()
+                            response_data = await response.text()
                     elif method.upper() == "POST":
-                        response = page.goto(url)
+                        await page.goto(url)
                         if payload:
-                            response = page.evaluate(f'''
+                            response_data = await page.evaluate(f'''
                                 fetch("{url}", {{
                                     method: "POST",
                                     headers: {json.dumps(headers)},
                                     body: {json.dumps(payload)}
                                 }}).then(response => response.text())
                             ''')
-                            response_data = response
-                            
-                    # Create a requests.Response-like object
-                    class PlaywrightResponse:
-                        def __init__(self, data, status_code):
-                            self._data = data
-                            self.status_code = status_code
-                            
-                        def json(self):
-                            return json.loads(self._data)
-                            
-                        def raise_for_status(self):
-                            if not (200 <= self.status_code < 300):
-                                raise requests.exceptions.HTTPError(
-                                    f"HTTP Error: {self.status_code}"
-                                )
-                    
-                    # Clean up
-                    context.close()
-                    browser.close()
-                    
+                    await context.close()
+                    await browser.close()
                     if response_data:
-                        return PlaywrightResponse(response_data, 200)
-                    
+                        return json.loads(response_data)
             except Exception as e:
-                logger.error(
-                    f"Request failed (attempt {attempt + 1}/{max_retries}): {str(e)}"
-                )
+                logger.error(f"Request failed (attempt {attempt + 1}/{max_retries}): {str(e)}")
                 if attempt < max_retries - 1:
-                    time.sleep(retry_delay)
+                    await asyncio.sleep(retry_delay)
                     retry_delay *= 2
                 else:
                     logger.error(f"Max retries reached for URL: {url}")
                     return None
         return None
 
-
     def preprocess_numeric_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Preprocess numeric columns in the dataframe."""
         numeric_columns = [
             'CURRENT_PRICE', 'CLOSING_PRICE',
             'ASSETS_UNDER_MANAGEMENT', 'EXPENSE_RATIO'
@@ -240,143 +158,104 @@ class ETFDataFetcher:
         for col in numeric_columns:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
-                # Format currency columns
                 if col in ['CURRENT_PRICE', 'CLOSING_PRICE', 'ASSETS_UNDER_MANAGEMENT']:
                     df[col] = df[col].apply(
                         lambda x: f"${x:,.2f}" if pd.notnull(x) else ''
                     )
-                # Format percentage columns
                 elif col == 'EXPENSE_RATIO':
                     df[col] = df[col].apply(
                         lambda x: f"{x:.2%}" if pd.notnull(x) else ''
                     )
         return df
 
-    def fetch_stockanalysis_data(self) -> pd.DataFrame:
-        """Fetch and process ETF data from Stock Analysis API using Playwright."""
+    async def fetch_stockanalysis_data(self) -> pd.DataFrame:
         try:
-            response = self.make_request(
-                self.stockanalysis_url,
-                headers=self.get_dynamic_headers(self.stockanalysis_url),
-                verify=False
-            )
-
-            if response and hasattr(response, 'json'):
-                data = response.json()
-                if data and 'data' in data:
-                    raw = data.get("data")
-                    df = (
-                        pd.DataFrame()
-                        .from_dict(raw.get("data", {}))
-                        .T.reset_index()
-                        .rename(columns=str.upper)
-                        .rename(
-                            columns={
-                                "INDEX": "TICKER_SYMBOL",
-                                "ISSUER": "ETF_ISSUER",
-                                "N": "ETF_DESCRIPTION",
-                                "ASSETCLASS": "ASSET_CLASS",
-                                "INCEPTIONDATE": "INCEPTION_DATE",
-                                "EXCHANGE": "LISTED_EXCHANGE",
-                                "ETFLEVERAGE": "LEVERAGE",
-                                "AUM": "ASSETS_UNDER_MANAGEMENT",
-                                "CLOSE": "CLOSING_PRICE",
-                                "HOLDINGS": "NUMBER_OF_HOLDINGS",
-                                "PRICE": "CURRENT_PRICE",
-                                "ETFCATEGORY": "ETF_CATEGORY",
-                                "EXPENSERATIO": "EXPENSE_RATIO",
-                                "ETFINDEX": "TRACKING_INDEX",
-                                "ETFREGION": "GEOGRAPHIC_REGION",
-                                "ETFCOUNTRY": "COUNTRY_FOCUS",
-                                "OPTIONABLE": "HAS_OPTIONS",
-                            }
-                        )
+            headers = await self.get_dynamic_headers(self.stockanalysis_url)
+            data = await self.make_request(self.stockanalysis_url, headers=headers)
+            if data and 'data' in data:
+                raw = data.get("data")
+                df = (
+                    pd.DataFrame()
+                    .from_dict(raw.get("data", {}))
+                    .T.reset_index()
+                    .rename(columns=str.upper)
+                    .rename(
+                        columns={
+                            "INDEX": "TICKER_SYMBOL",
+                            "ISSUER": "ETF_ISSUER",
+                            "N": "ETF_DESCRIPTION",
+                            "ASSETCLASS": "ASSET_CLASS",
+                            "INCEPTIONDATE": "INCEPTION_DATE",
+                            "EXCHANGE": "LISTED_EXCHANGE",
+                            "ETFLEVERAGE": "LEVERAGE",
+                            "AUM": "ASSETS_UNDER_MANAGEMENT",
+                            "CLOSE": "CLOSING_PRICE",
+                            "HOLDINGS": "NUMBER_OF_HOLDINGS",
+                            "PRICE": "CURRENT_PRICE",
+                            "ETFCATEGORY": "ETF_CATEGORY",
+                            "EXPENSERATIO": "EXPENSE_RATIO",
+                            "ETFINDEX": "TRACKING_INDEX",
+                            "ETFREGION": "GEOGRAPHIC_REGION",
+                            "ETFCOUNTRY": "COUNTRY_FOCUS",
+                            "OPTIONABLE": "HAS_OPTIONS",
+                        }
                     )
-                    return self.preprocess_numeric_data(df)
-            
+                )
+                return self.preprocess_numeric_data(df)
             logger.error("Failed to fetch or process Stock Analysis data")
             return pd.DataFrame()
-            
-        except Exception as e:
-            logger.error(f"Error in Stock Analysis data fetching: {str(e)}")
+        except:
             return pd.DataFrame()
 
-   
-
-    def fetch_etfdb_data(self) -> pd.DataFrame:
-        """Fetch ETF data from ETFDB API using Playwright with pagination."""
+    async def fetch_etfdb_data(self) -> pd.DataFrame:
         import json
         all_data = []
-        max_pages = 56  # Adjust based on actual number of pages
-        
+        max_pages = 56
         try:
-            with sync_playwright() as p:
-             browser = p.chromium.launch(
-                headless=True,
-                args=['--no-sandbox', '--disable-setuid-sandbox']
-            )
-            
-            context = browser.new_context(
-                viewport={'width': 1920, 'height': 1080},
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
-                locale='en-US'
-            )
-            
-            page = context.new_page()
-            headers = self.get_dynamic_headers(self.etfdb_url)
-            page.set_extra_http_headers(headers)
-            
-            for page_num in range(1, max_pages + 1):
-                try:
-                    payload = {"active_or_passive": "Active", "page": page_num}
-                    
-                    # Navigate to page
-                    response = page.goto(self.etfdb_url)
-                    if response:
-                        # Execute POST request via JavaScript
-                        result = page.evaluate(f'''
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(
+                    headless=True,
+                    args=['--no-sandbox', '--disable-setuid-sandbox']
+                )
+                context = await browser.new_context(
+                    viewport={'width': 1920, 'height': 1080},
+                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
+                    locale='en-US'
+                )
+                page = await context.new_page()
+                headers = await self.get_dynamic_headers(self.etfdb_url)
+                await page.set_extra_http_headers(headers)
+                for page_num in range(1, max_pages + 1):
+                    try:
+                        payload = {"active_or_passive": "Active", "page": page_num}
+                        await page.goto(self.etfdb_url)
+                        result = await page.evaluate(f'''
                             fetch("{self.etfdb_url}", {{
                                 method: "POST",
                                 headers: {json.dumps(headers)},
                                 body: {json.dumps(payload)}
                             }}).then(response => response.json())
                         ''')
-                        
                         if result and 'data' in result:
                             all_data.extend(result['data'])
-                        
-                        # Wait before next request
-                        page.wait_for_timeout(1000)
-                        
-                except Exception as e:
-                    logger.error(
-                        f"Error fetching page {page_num}: {str(e)}"
-                    )
-                    continue
-            
-            # Clean up
-            context.close()
-            browser.close()
-            
+                        await page.wait_for_timeout(1000)
+                    except Exception as e:
+                        logger.error(f"Error fetching page {page_num}: {str(e)}")
+                        continue
+                await context.close()
+                await browser.close()
             if all_data:
                 etf_df = pd.DataFrame(all_data)
                 etf_df.loc[:, "symbol"] = etf_df["mobile_title"].apply(
-                lambda x: x.split(" - ")[0] if isinstance(x, str) else ""
-            )
+                    lambda x: x.split(" - ")[0] if isinstance(x, str) else ""
+                )
                 etf_df["Actively Managed"] = "YES"
-            return etf_df[["symbol", "Actively Managed"]]
-            
-        except Exception as e:
-            logger.error(f"Error in ETFDB data fetching: {str(e)}")
-    
+                return etf_df[["symbol", "Actively Managed"]]
+        except:
+            pass
         return pd.DataFrame(columns=["symbol", "Actively Managed"])
-    
-    def merge_data(
-        self,
-        stockanalysis_df: pd.DataFrame,
-        etfdb_df: pd.DataFrame
-    ) -> pd.DataFrame:
-        """Merge data from multiple sources and add computed columns."""
+
+    def merge_data(self, stockanalysis_df: pd.DataFrame, etfdb_df: pd.DataFrame) -> pd.DataFrame:
         merged_df = pd.merge(
             stockanalysis_df,
             etfdb_df,
@@ -386,46 +265,37 @@ class ETFDataFetcher:
         )
         merged_df["Actively Managed"] = merged_df["Actively Managed"].fillna("NO")
         merged_df = merged_df.drop("symbol", axis=1)
-
-        # Add computed columns
         if 'CURRENT_PRICE' in merged_df.columns and 'CLOSING_PRICE' in merged_df.columns:
             current_price = pd.to_numeric(
-                merged_df['CURRENT_PRICE'].str.replace('$', '')
+                merged_df['CURRENT_PRICE'].str.replace(r'[^0-9\.]', '', regex=True)
             )
             closing_price = pd.to_numeric(
-                merged_df['CLOSING_PRICE'].str.replace('$', '')
+                merged_df['CLOSING_PRICE'].str.replace(r'[^0-9\.]', '', regex=True)
             )
-
             merged_df['PRICE_CHANGE'] = current_price - closing_price
-            merged_df['PRICE_CHANGE_PCT'] = (
-                (current_price - closing_price) / closing_price
-            ) * 100
-
+            merged_df['PRICE_CHANGE_PCT'] = ((current_price - closing_price) / closing_price) * 100
             merged_df['PRICE_CHANGE'] = merged_df['PRICE_CHANGE'].apply(
                 lambda x: f"${x:,.2f}" if pd.notnull(x) else ''
             )
             merged_df['PRICE_CHANGE_PCT'] = merged_df['PRICE_CHANGE_PCT'].apply(
                 lambda x: f"{x:.2f}%" if pd.notnull(x) else ''
             )
-
         return merged_df
 
-    def fetch_and_combine_data(self) -> pd.DataFrame:
-        """Fetch data from all sources and combine them."""
-        stockanalysis_df = self.fetch_stockanalysis_data()
-        etfdb_df = self.fetch_etfdb_data()
+    async def fetch_and_combine_data(self) -> pd.DataFrame:
+        stockanalysis_df = await self.fetch_stockanalysis_data()
+        etfdb_df = await self.fetch_etfdb_data()
         return self.merge_data(stockanalysis_df, etfdb_df)
 
 
 @st.cache_data(ttl=3600)
-def load_data() -> pd.DataFrame:
-    """Load ETF data with caching."""
+def load_data_sync() -> pd.DataFrame:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     fetcher = ETFDataFetcher()
-    return fetcher.fetch_and_combine_data()
-
+    return loop.run_until_complete(fetcher.fetch_and_combine_data())
 
 def get_grid_options() -> Dict:
-    """Get consolidated grid options configuration."""
     return {
         'enableRangeSelection': True,
         'enableCharts': True,
@@ -477,22 +347,18 @@ def get_grid_options() -> Dict:
         'includePivotColumns': True,
     }
 
-
 def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> Dict:
-    """Configure the AG-Grid with enhanced features."""
     gb = GridOptionsBuilder.from_dataframe(df)
     custom_css = {
         ".ag-status-bar": {
-            "font-size": "16px",  # Increase font size
-            "font-weight": "bold",  # Make it bold
-            "color": "#333",  # Optional: Change font color
+            "font-size": "16px",
+            "font-weight": "bold",
+            "color": "#333"
         },
         ".ag-status-bar .ag-status-name-value": {
-            "font-size": "16px",
+            "font-size": "16px"
         }
     }
-
-    # Configure columns
     gb.configure_default_column(
         editable=True,
         sortable=True,
@@ -513,12 +379,8 @@ def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> D
         },
         menuTabs=['generalMenuTab', 'filterMenuTab', 'columnsMenuTab']
     )
-
-    # Conditionally enable grouping for a specific column
     if group_by_column and group_by_column in df.columns:
         gb.configure_column(group_by_column, rowGroup=True, hide=True)
-
-    # Configure selection
     gb.configure_selection(
         'multiple',
         use_checkbox=True,
@@ -527,8 +389,6 @@ def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> D
     )
     gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=100)
     gb.configure_side_bar(filters_panel=True, columns_panel=True)
-
-    # Configure status panels
     status_panels = {
         "statusPanels": [
             {"statusPanel": "agTotalAndFilteredRowCountComponent", "align": "left"},
@@ -538,10 +398,7 @@ def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> D
             {"statusPanel": "agAggregationComponent", "align": "right"}
         ]
     }
-
-    # Add all grid options
     grid_options = get_grid_options()
-
     gb.configure_grid_options(
         statusBar=status_panels,
         **grid_options,
@@ -577,87 +434,10 @@ def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> D
             ],
             'defaultToolPanel': ''
         },
-        rowHeight=50,  # Increased row height for widget visibility
- # Increase row height for better visibility
-        paginationPageSize=20,  # Set pagination size
+        rowHeight=50,
+        paginationPageSize=20,
         onFirstDataRendered='onFirstDataRendered'
     )
-    # Configure TradingView chart button
-
-    price_renderer = JsCode('''
-        class PriceRenderer {
-            init(params) {
-                const symbol = params.data.TICKER_SYMBOL;
-                this.eGui = document.createElement('div');
-                this.eGui.style.cssText = "width: 100%; height: 100%; display: flex; justify-content: center; align-items: center;";
-
-                const container = document.createElement('div');
-                container.className = "tradingview-widget-container";
-                container.style.cssText = "width: 150px; height: 70px;";
-
-                const script = document.createElement('script');
-                script.src = "https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js";
-                script.async = true;
-                script.innerHTML = JSON.stringify({
-                    "symbol": symbol,
-                    "width": 150,
-                    "height": 70,
-                    "locale": "en",
-                    "colorTheme": "dark",
-                    "autosize": true,
-                    "isTransparent": true
-                });
-
-                container.appendChild(script);
-                this.eGui.appendChild(container);
-            }
-
-            getGui() {
-                return this.eGui;
-            }
-        }
-    ''')
-
-    # TradingView Sparkline Renderer
-    sparkline_renderer = JsCode('''
-        class SparklineRenderer {
-            init(params) {
-                const symbol = params.data.TICKER_SYMBOL;
-                this.eGui = document.createElement('div');
-                this.eGui.style.cssText = "width: 100%; height: 100%; display: flex; justify-content: center; align-items: center;";
-
-                const container = document.createElement('div');
-                container.className = "tradingview-widget-container";
-                container.style.cssText = "width: 150px; height: 70px;";
-
-                const script = document.createElement('script');
-                script.src = "https://s3.tradingview.com/external-embedding/embed-widget-mini-chart.js";
-                script.async = true;
-                script.innerHTML = JSON.stringify({
-                    "symbol": symbol,
-                    "width": 150,
-                    "height": 70,
-                    "locale": "en",
-                    "colorTheme": "dark",
-                    "autosize": true,
-                    "isTransparent": true,
-                    "dateRange": "1D"
-                });
-
-                container.appendChild(script);
-                this.eGui.appendChild(container);
-            }
-
-            getGui() {
-                return this.eGui;
-            }
-        }
-    ''')
-    # Add columns with custom renderers
-
-
-
-
     button_renderer = JsCode('''
         class ButtonRenderer {
             init(params) {
@@ -674,17 +454,14 @@ def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> D
                     transition: all 0.3s ease;
                     box-shadow: 0 2px 5px rgba(0,0,0,0.2);
                 `;
-
                 this.eGui.addEventListener('mouseover', () => {
                     this.eGui.style.transform = 'translateY(-2px)';
                     this.eGui.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
                 });
-
                 this.eGui.addEventListener('mouseout', () => {
                     this.eGui.style.transform = 'translateY(0)';
                     this.eGui.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
                 });
-
                 this.eGui.addEventListener('click', () => {
                     const modal = document.createElement('div');
                     modal.style.cssText = `
@@ -700,7 +477,6 @@ def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> D
                         z-index: 1000;
                         backdrop-filter: blur(5px);
                     `;
-
                     const modalContent = document.createElement('div');
                     modalContent.style.cssText = `
                         background: #1E1E1E;
@@ -712,7 +488,6 @@ def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> D
                         box-shadow: 0 10px 25px rgba(0,0,0,0.5);
                         border: 1px solid rgba(255,255,255,0.1);
                     `;
-
                     const closeBtn = document.createElement('button');
                     closeBtn.innerHTML = '✕';
                     closeBtn.style.cssText = `
@@ -732,22 +507,18 @@ def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> D
                         font-size: 16px;
                         transition: all 0.3s ease;
                     `;
-
                     closeBtn.addEventListener('mouseover', () => {
                         closeBtn.style.background = 'rgba(255,255,255,0.2)';
                         closeBtn.style.transform = 'scale(1.1)';
                     });
-
                     closeBtn.addEventListener('mouseout', () => {
                         closeBtn.style.background = 'rgba(255,255,255,0.1)';
                         closeBtn.style.transform = 'scale(1)';
                     });
-
                     closeBtn.onclick = () => {
                         modal.style.opacity = '0';
                         setTimeout(() => document.body.removeChild(modal), 300);
                     };
-
                     const ticker = params.data.TICKER_SYMBOL;
                     const widgetContainer = document.createElement('div');
                     widgetContainer.className = 'tradingview-widget-container';
@@ -755,20 +526,17 @@ def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> D
                         width: 100%;
                         height: calc(100% - 40px);
                     `;
-
                     const widgetDiv = document.createElement('div');
                     widgetDiv.className = 'tradingview-widget-container__widget';
                     widgetDiv.style.cssText = `
                         width: 100%;
                         height: 100%;
                     `;
-
                     widgetContainer.appendChild(widgetDiv);
                     modalContent.appendChild(closeBtn);
                     modalContent.appendChild(widgetContainer);
                     modal.appendChild(modalContent);
                     document.body.appendChild(modal);
-
                     const script = document.createElement('script');
                     script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
                     script.async = true;
@@ -800,85 +568,56 @@ def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> D
                         "container_id": "tradingview_chart"
                     });
                     widgetContainer.appendChild(script);
-
-                    // Add fade-in animation
                     modal.style.opacity = '0';
                     modal.style.transition = 'opacity 0.3s ease';
                     setTimeout(() => modal.style.opacity = '1', 10);
                 });
             }
-
             getGui() {
                 return this.eGui;
             }
         }
     ''')
-
-
     gb.configure_column('ACTION', headerName="CHART", cellRenderer=button_renderer)
-    return gb.build(),custom_css
-
-
-
+    return gb.build(), custom_css
 
 def display_summary_stats(df: pd.DataFrame) -> None:
-    """Display summary statistics for the ETF data using toast notifications."""
     try:
         total_etfs = len(df)
         total_aum = pd.to_numeric(
             df['ASSETS_UNDER_MANAGEMENT']
             .str.replace('$', '', regex=False)
-            .str.replace(',', '', regex=False)
+            .str.replace(',', '', regex=False),
+            errors='coerce'
         ).sum()
         avg_expense = pd.to_numeric(
-            df['EXPENSE_RATIO']
-            .str.rstrip('%')
-            .astype(float, errors='ignore')
+            df['EXPENSE_RATIO'].str.rstrip('%'),
+            errors='coerce'
         ).mean()
         active_etfs = (df['Actively Managed'] == 'YES').sum()
-
-        # Display metrics as toasts (removed 'duration')
         st.toast(f"📊 Total ETFs: **{total_etfs:,}**", icon="📈")
         time.sleep(3)
         st.toast(f"💰 Total AUM: **${total_aum:,.2f}B**", icon="💵")
         time.sleep(3)
-        
         st.toast(f"📉 Avg Expense Ratio: **{avg_expense:.2f}%**", icon="🧾")
         time.sleep(3)
-
         st.toast(f"🔍 Active ETFs: **{active_etfs:,}**", icon="✅")
-
     except Exception as e:
         st.error(f"Failed to calculate and display summary stats: {str(e)}")
         logger.error(f"Summary stats error: {str(e)}")
 
-
-
 def export_data(df: pd.DataFrame, format: str = 'csv') -> tuple[bytes, str, str]:
-    """
-    Export DataFrame to specified format and return bytes for Streamlit download.
-    
-    Args:
-        df (pd.DataFrame): DataFrame to export
-        format (str): Export format ('csv' or 'excel')
-        
-    Returns:
-        tuple: (bytes_data, filename, mime_type)
-    """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
     try:
         if format.lower() == 'csv':
             buffer = io.BytesIO()
             df.to_csv(buffer, index=False, encoding='utf-8')
             mime_type = "text/csv"
             file_extension = "csv"
-            
         elif format.lower() == 'excel':
             buffer = io.BytesIO()
             with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
                 df.to_excel(writer, index=False, sheet_name='ETF_Data')
-                # Auto-adjust columns width
                 worksheet = writer.sheets['ETF_Data']
                 for i, col in enumerate(df.columns):
                     max_length = max(
@@ -888,48 +627,29 @@ def export_data(df: pd.DataFrame, format: str = 'csv') -> tuple[bytes, str, str]
                     worksheet.set_column(i, i, max_length)
             mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             file_extension = "xlsx"
-            
         else:
             raise ValueError(f"Unsupported export format: {format}")
-        
-        # Get the bytes data
         buffer.seek(0)
         bytes_data = buffer.getvalue()
-        
-        # Generate filename
         filename = f"etf_data_{timestamp}.{file_extension}"
-        
         return bytes_data, filename, mime_type
-        
     except Exception as e:
         logger.error(f"Export error: {str(e)}")
         st.error(f"Failed to export data: {str(e)}")
         return None, None, None
 
 def display_export_section(df: pd.DataFrame) -> None:
-    """
-    Display export options and handle file downloads.
-    
-    Args:
-        df (pd.DataFrame): DataFrame to export
-    """
     st.subheader("Export Options")
-    
-    # Create two columns for export options
     col1, col2 = st.columns([2, 3])
-    
     with col1:
         export_format = st.selectbox(
             "Choose Export Format",
             options=["CSV", "Excel"],
             key="export_format"
         )
-    
     with col2:
-        # Generate export data only when button is clicked
         if export_format:
             bytes_data, filename, mime_type = export_data(df, export_format.lower())
-            
             if bytes_data and filename and mime_type:
                 st.download_button(
                     label=f"📥 Download as {export_format}",
@@ -940,40 +660,31 @@ def display_export_section(df: pd.DataFrame) -> None:
                     help=f"Click to download the ETF data as {export_format} file"
                 )
 
-# Update the main function to use the new export functionality
 def main() -> None:
-    """Main application function."""
     st.set_page_config(
         layout="wide",
         page_title="ETF Explorer Pro",
         page_icon="📈",
         initial_sidebar_state="expanded"
     )
-
-    # Title and description
     st.title("📈 ETF Explorer Pro")
     st.markdown("""
     Comprehensive ETF analysis platform with advanced filtering, visualization,
     and real-time data.
     """)
-
-    # Load data
     try:
         with st.spinner("Loading ETF data..."):
             start_time = time.time()
-            etf_data = load_data()
+            etf_data = load_data_sync()
             load_time = time.time() - start_time
             st.success(f"Data loaded successfully in {load_time:.2f} seconds")
     except Exception as e:
         st.error(f"Failed to load ETF data: {str(e)}")
         logger.error(f"Data loading error: {str(e)}")
         return
-
     if etf_data is not None and not etf_data.empty:
-        # Filters section
         st.subheader("Filters")
         col1, col2 = st.columns(2)
-
         with col1:
             unique_issuers = etf_data['ETF_ISSUER'].dropna().unique()
             selected_issuer = st.selectbox(
@@ -981,30 +692,20 @@ def main() -> None:
                 options=["All"] + sorted(unique_issuers.tolist()),
                 index=0
             )
-
         with col2:
             group_by_issuer = st.checkbox("Group by ETF Issuer", value=False)
-
-        # Apply filter
         filtered_data = (
             etf_data[etf_data['ETF_ISSUER'] == selected_issuer]
             if selected_issuer != "All" else etf_data
         )
-
-        # Display summary statistics
         display_summary_stats(filtered_data)
-
-        # Display export options
         display_export_section(filtered_data)
-
-        # Configure and display grid
         st.subheader("ETF Data Grid")
         try:
             grid_options, custom_css = configure_grid(
                 filtered_data,
                 group_by_column="ETF_ISSUER" if group_by_issuer else None
             )
-            grid_options,custom_css = configure_grid(filtered_data, group_by_column="ETF_ISSUER" if group_by_issuer else None)
             AgGrid(
                 filtered_data,
                 gridOptions=grid_options,
@@ -1024,7 +725,5 @@ def main() -> None:
             st.error(f"Error displaying grid: {str(e)}")
             logger.error(f"Grid error: {str(e)}")
 
-
 if __name__ == "__main__":
     main()
-
