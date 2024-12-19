@@ -28,5 +28,10 @@
   },
   "forwardPorts": [
     8501
+  ],
+  "runArgs": [
+    "--entrypoint", "bash",
+    "-c",
+    "playwright install"
   ]
 }
