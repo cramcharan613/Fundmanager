@@ -22,13 +22,10 @@
     "echo 'Installing Python dependencies...'",
     "pip3 install --user -r requirements.txt",
     "pip3 install --user streamlit",
-    "echo 'Installing Playwright...'",
-    "python3 -m playwright install --with-deps",
-    "sudo playwright install",
     "echo '✅ Packages installed and Requirements met'"
   ],
   "postAttachCommand": {
-    "server": "streamlit run streamlit_app.py --server.enableCORS false --server.enableXsrfProtection false"
+    "server": "pip3 install --user playwright && python3 -m playwright install --with-deps && streamlit run streamlit_app.py --server.enableCORS false --server.enableXsrfProtection false"
   },
   "portsAttributes": {
     "8501": {
