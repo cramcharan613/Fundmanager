@@ -8,3 +8,4 @@ urllib3
 playwright
 openpyxl
 xlsxwriter
+aiohttp
