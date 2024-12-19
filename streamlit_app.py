@@ -1,3 +1,4 @@
+```python
 import asyncio
 from typing import Dict, Optional
 from datetime import datetime
@@ -26,7 +27,6 @@ load_dotenv()
 
 @st.cache_data()
 def ensure_playwright_setup() -> bool:
-    # Run the Playwright dependency installation once per session
     if not os.path.exists('/usr/bin/google-chrome'):
         os.system('playwright install-deps')
     os.system('playwright install')
@@ -44,6 +44,15 @@ class ETFDataFetcher:
         )
         self.etfdb_base_url = "https://etfdb.com"
         self.etfdb_api_url = "https://etfdb.com/api/screener"
+        self.etfdb_headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/91.0.4472.124 Safari/537.36"
+            ),
+            "Accept-Language": "en-US,en;q=0.9",
+            "Content-Type": "application/json",
+        }
 
     async def get_dynamic_headers(self, url: str) -> Dict:
         try:
@@ -157,7 +166,6 @@ class ETFDataFetcher:
                     await browser.close()
 
                     if response_data:
-                        # Attempt to parse as JSON
                         try:
                             return json.loads(response_data)
                         except json.JSONDecodeError:
@@ -243,16 +251,19 @@ class ETFDataFetcher:
                 )
                 context = await browser.new_context(
                     viewport={'width': 1920, 'height': 1080},
-                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
+                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/91.0.4472.124 Safari/537.36',
                     locale='en-US'
                 )
                 page = await context.new_page()
                 await page.goto(self.etfdb_base_url, wait_until='networkidle', timeout=30000)
-                headers = await self.get_dynamic_headers(self.etfdb_base_url)
+
+                # Use the specified etfdb_headers for all requests
+                headers = self.etfdb_headers
 
                 for page_num in range(1, max_pages + 1):
                     try:
                         payload = {"active_or_passive": "Active", "page": page_num}
+                        # Execute the fetch call in the page's context
                         result = await page.evaluate(f'''
                             fetch("{self.etfdb_api_url}", {{
                                 method: "POST",
@@ -270,10 +281,14 @@ class ETFDataFetcher:
                         ''')
                         if result and isinstance(result, dict) and 'data' in result:
                             all_data.extend(result['data'])
-                        await page.wait_for_timeout(1000)
+
+                        # Add a small sleep between requests to avoid overwhelming the server
+                        await asyncio.sleep(0.5)
+
                     except Exception as e:
                         logger.error(f"Error fetching page {page_num}: {str(e)}")
                         continue
+
                 await context.close()
                 await browser.close()
             if all_data:
@@ -693,7 +708,12 @@ def display_export_section(df: pd.DataFrame) -> None:
                 )
 
 def main() -> None:
-
+    st.set_page_config(
+        layout="wide",
+        page_title="ETF Explorer Pro",
+        page_icon="📈",
+        initial_sidebar_state="expanded"
+    )
     st.title("📈 ETF Explorer Pro")
     st.markdown("""
     Comprehensive ETF analysis platform with advanced filtering, visualization,
@@ -753,10 +773,5 @@ def main() -> None:
             logger.error(f"Grid error: {str(e)}")
 
 if __name__ == "__main__":
-    st.set_page_config(
-        layout="wide",
-        page_title="ETF Explorer Pro",
-        page_icon="📈",
-        initial_sidebar_state="expanded"
-    )
     main()
+```
