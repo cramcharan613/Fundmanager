@@ -1,4 +1,3 @@
-
 import asyncio
 from typing import Dict, Optional
 from datetime import datetime
@@ -17,10 +16,6 @@ import re
 import aiohttp
 from playwright.async_api import async_playwright
 
-if not os.path.exists('/usr/bin/google-chrome'):
-    os.system('playwright install-deps')
-os.system('playwright install')
-
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -28,6 +23,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 load_dotenv()
+
+@st.cache_data()
+def ensure_playwright_setup() -> bool:
+    # Run the Playwright dependency installation once per session
+    if not os.path.exists('/usr/bin/google-chrome'):
+        os.system('playwright install-deps')
+    os.system('playwright install')
+    return True
+
+ensure_playwright_setup()
 
 class ETFDataFetcher:
     def __init__(self):
@@ -147,7 +152,7 @@ class ETFDataFetcher:
                                 body: {json.dumps(payload) if payload else "null"}
                             }}).then(response => response.text())
                         ''')
-                    
+
                     await context.close()
                     await browser.close()
 
@@ -156,7 +161,6 @@ class ETFDataFetcher:
                         try:
                             return json.loads(response_data)
                         except json.JSONDecodeError:
-                            # It's not JSON, possibly HTML or something else
                             logger.error(f"Error fetching: Response not valid JSON, received: {response_data[:100]}")
                             return None
             except Exception as e:
