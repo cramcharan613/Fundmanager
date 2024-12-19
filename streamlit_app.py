@@ -15,6 +15,7 @@ import time
 import re
 import aiohttp
 from playwright.async_api import async_playwright
+from bs4 import BeautifulSoup
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,16 +43,11 @@ class ETFDataFetcher:
             "expenseRatio+etfIndex+etfRegion+etfCountry+optionable.json"
         )
         self.etfdb_base_url = "https://etfdb.com"
-        self.etfdb_api_url = "https://etfdb.com/api/screener"
-        self.etfdb_headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/91.0.4472.124 Safari/537.36"
-            ),
-            "Accept-Language": "en-US,en;q=0.9",
-            "Content-Type": "application/json",
-        }
+        # Base page for actively managed ETFs
+        self.actively_managed_url = (
+            "https://etfdb.com/themes/actively-managed-etfs/"
+            "#complete-list&sort_name=assets_under_management&sort_order=desc&page={page}"
+        )
 
     async def get_dynamic_headers(self, url: str) -> Dict:
         try:
@@ -62,7 +58,8 @@ class ETFDataFetcher:
                 )
                 context = await browser.new_context(
                     viewport={'width': 1920, 'height': 1080},
-                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                               '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                     locale='en-US'
                 )
                 page = await context.new_page()
@@ -75,8 +72,11 @@ class ETFDataFetcher:
                             if v is not None and v != '':
                                 headers[k] = v
                         headers.update({
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                            'Accept': 'application/json,text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                                          'AppleWebKit/537.36 (KHTML, like Gecko) '
+                                          'Chrome/120.0.0.0 Safari/537.36',
+                            'Accept': 'application/json,text/html,application/xhtml+xml,'
+                                      'application/xml;q=0.9,image/webp,*/*;q=0.8',
                             'Accept-Language': 'en-US,en;q=0.5',
                             'Accept-Encoding': 'gzip, deflate, br',
                             'Connection': 'keep-alive',
@@ -100,85 +100,23 @@ class ETFDataFetcher:
                 await browser.close()
                 if not headers:
                     return {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                        'Accept': 'application/json,text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                                      'AppleWebKit/537.36 (KHTML, like Gecko) '
+                                      'Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'application/json,text/html,application/xhtml+xml,'
+                                  'application/xml;q=0.9,image/webp,*/*;q=0.8',
                         'Accept-Language': 'en-US,en;q=0.5'
                     }
                 return headers
         except:
             return {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'application/json,text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                              'AppleWebKit/537.36 (KHTML, like Gecko) '
+                              'Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'application/json,text/html,application/xhtml+xml,'
+                          'application/xml;q=0.9,image/webp,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.5'
             }
-
-    async def make_request(
-        self,
-        url: str,
-        method: str = "GET",
-        headers: Optional[Dict] = None,
-        payload: Optional[Dict] = None
-    ) -> Optional[dict]:
-        if headers is None:
-            headers = await self.get_dynamic_headers(url)
-
-        max_retries = 3
-        retry_delay = 1
-
-        for attempt in range(max_retries):
-            try:
-                async with async_playwright() as p:
-                    browser = await p.chromium.launch(
-                        headless=True,
-                        args=['--no-sandbox', '--disable-setuid-sandbox']
-                    )
-                    context = await browser.new_context(
-                        viewport={'width': 1920, 'height': 1080},
-                        user_agent=headers.get('User-Agent', ''),
-                        locale='en-US'
-                    )
-                    page = await context.new_page()
-                    await page.set_extra_http_headers(headers)
-
-                    base_url_match = re.match(r"(https://[^/]+)", url)
-                    base_url = base_url_match.group(1) if base_url_match else "https://etfdb.com"
-
-                    await page.goto(base_url, wait_until='networkidle', timeout=30000)
-
-                    if method.upper() == "GET":
-                        response_data = await page.evaluate(f'''
-                            fetch("{url}", {{
-                                method: "GET",
-                                headers: {json.dumps(headers)}
-                            }}).then(response => response.text())
-                        ''')
-                    else:
-                        response_data = await page.evaluate(f'''
-                            fetch("{url}", {{
-                                method: "{method.upper()}",
-                                headers: {json.dumps(headers)},
-                                body: {json.dumps(payload) if payload else "null"}
-                            }}).then(response => response.text())
-                        ''')
-
-                    await context.close()
-                    await browser.close()
-
-                    if response_data:
-                        try:
-                            return json.loads(response_data)
-                        except json.JSONDecodeError:
-                            logger.error(f"Error fetching: Response not valid JSON, received: {response_data[:100]}")
-                            return None
-            except Exception as e:
-                logger.error(f"Request failed (attempt {attempt + 1}/{max_retries}): {str(e)}")
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(retry_delay)
-                    retry_delay *= 2
-                else:
-                    logger.error(f"Max retries reached for URL: {url}")
-                    return None
-        return None
 
     def preprocess_numeric_data(self, df: pd.DataFrame) -> pd.DataFrame:
         numeric_columns = [
@@ -198,12 +136,82 @@ class ETFDataFetcher:
                     )
         return df
 
+    async def fetch_actively_managed_etfs(self, max_pages=10) -> pd.DataFrame:
+        """Scrape actively managed ETFs from ETFDB by parsing the HTML pages."""
+        all_tickers = []
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(
+                headless=True,
+                args=['--no-sandbox', '--disable-setuid-sandbox']
+            )
+            context = await browser.new_context(
+                viewport={'width': 1920, 'height': 1080},
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                           'AppleWebKit/537.36 (KHTML, like Gecko) '
+                           'Chrome/120.0.0.0 Safari/537.36',
+                locale='en-US'
+            )
+            page = await context.new_page()
+
+            # Iterate through pages
+            for page_num in range(1, max_pages+1):
+                url = self.actively_managed_url.format(page=page_num)
+                try:
+                    await page.goto(url, wait_until='networkidle', timeout=30000)
+                    await page.wait_for_load_state('domcontentloaded')
+
+                    html = await page.content()
+                    soup = BeautifulSoup(html, 'html.parser')
+
+                    # Adjust the selector below based on the actual HTML structure
+                    # Assuming tickers appear in a table with class "table" and ticker in a <a> or <td>
+                    table = soup.find('table', class_='table')
+                    if not table:
+                        logger.info(f"No table found on page {page_num}, stopping.")
+                        break
+
+                    rows = table.find_all('tr')
+                    # Assuming first row might be headers
+                    for row in rows[1:]:
+                        cols = row.find_all('td')
+                        if not cols:
+                            continue
+                        # Adjust based on actual column structure
+                        # Assume first column or a specific column has ticker
+                        ticker_col = cols[0].find('a')
+                        if ticker_col:
+                            ticker = ticker_col.text.strip().upper()
+                            if ticker:
+                                all_tickers.append(ticker)
+                    # Add a small delay to avoid overwhelming server
+                    await asyncio.sleep(1)
+                except Exception as e:
+                    logger.error(f"Error fetching active ETF page {page_num}: {str(e)}")
+                    continue
+
+            await context.close()
+            await browser.close()
+
+        if not all_tickers:
+            return pd.DataFrame(columns=["symbol", "Actively Managed"])
+
+        # Remove duplicates
+        all_tickers = list(set(all_tickers))
+
+        # Create dataframe
+        df = pd.DataFrame({"symbol": all_tickers})
+        df["Actively Managed"] = "YES"
+        return df
+
     async def fetch_stockanalysis_data(self) -> pd.DataFrame:
+        """Fetch stock analysis ETF data."""
         try:
             headers = await self.get_dynamic_headers(self.stockanalysis_url)
-            data = await self.make_request(self.stockanalysis_url, headers=headers)
-            if data and 'data' in data:
-                raw = data.get("data")
+            # Make a request using Playwright in a similar way as before
+            # We'll use a direct fetch scenario
+            response_data = await self.playwright_fetch_json(self.stockanalysis_url, headers)
+            if response_data and 'data' in response_data:
+                raw = response_data.get("data")
                 df = (
                     pd.DataFrame()
                     .from_dict(raw.get("data", {}))
@@ -237,69 +245,36 @@ class ETFDataFetcher:
         except:
             return pd.DataFrame()
 
-    async def fetch_etfdb_data(self) -> pd.DataFrame:
-        import json
-        all_data = []
-        max_pages = 56
-
-        try:
-            async with async_playwright() as p:
-                browser = await p.chromium.launch(
-                    headless=True,
-                    args=['--no-sandbox', '--disable-setuid-sandbox']
-                )
+    async def playwright_fetch_json(self, url: str, headers: Dict) -> Optional[dict]:
+        """Utility method to fetch JSON using Playwright's page.evaluate."""
+        async with async_playwright() as p:
+            try:
+                browser = await p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-setuid-sandbox'])
                 context = await browser.new_context(
                     viewport={'width': 1920, 'height': 1080},
-                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/91.0.4472.124 Safari/537.36',
+                    user_agent=headers.get('User-Agent', ''),
                     locale='en-US'
                 )
                 page = await context.new_page()
-                await page.goto(self.etfdb_base_url, wait_until='networkidle', timeout=30000)
-
-                # Use the specified etfdb_headers for all requests
-                headers = self.etfdb_headers
-
-                for page_num in range(1, max_pages + 1):
-                    try:
-                        payload = {"active_or_passive": "Active", "page": page_num}
-                        # Execute the fetch call in the page's context
-                        result = await page.evaluate(f'''
-                            fetch("{self.etfdb_api_url}", {{
-                                method: "POST",
-                                headers: {json.dumps(headers)},
-                                body: {json.dumps(payload)}
-                            }})
-                            .then(response => response.text())
-                            .then(text => {{
-                                try {{
-                                    return JSON.parse(text);
-                                }} catch(e) {{
-                                    return null;
-                                }}
-                            }})
-                        ''')
-                        if result and isinstance(result, dict) and 'data' in result:
-                            all_data.extend(result['data'])
-
-                        # Add a small sleep between requests to avoid overwhelming the server
-                        await asyncio.sleep(0.5)
-
-                    except Exception as e:
-                        logger.error(f"Error fetching page {page_num}: {str(e)}")
-                        continue
-
+                base_url_match = re.match(r"(https://[^/]+)", url)
+                base_url = base_url_match.group(1) if base_url_match else "https://etfdb.com"
+                await page.goto(base_url, wait_until='networkidle', timeout=30000)
+                response_data = await page.evaluate(f'''
+                    fetch("{url}", {{
+                        method: "GET",
+                        headers: {json.dumps(headers)}
+                    }}).then(res => res.text())
+                ''')
                 await context.close()
                 await browser.close()
-            if all_data:
-                etf_df = pd.DataFrame(all_data)
-                etf_df.loc[:, "symbol"] = etf_df["mobile_title"].apply(
-                    lambda x: x.split(" - ")[0] if isinstance(x, str) else ""
-                )
-                etf_df["Actively Managed"] = "YES"
-                return etf_df[["symbol", "Actively Managed"]]
-        except:
-            pass
-        return pd.DataFrame(columns=["symbol", "Actively Managed"])
+                if response_data:
+                    try:
+                        return json.loads(response_data)
+                    except json.JSONDecodeError:
+                        return None
+            except Exception as e:
+                logger.error(f"Fetch JSON error: {str(e)}")
+                return None
 
     def merge_data(self, stockanalysis_df: pd.DataFrame, etfdb_df: pd.DataFrame) -> pd.DataFrame:
         merged_df = pd.merge(
@@ -329,8 +304,10 @@ class ETFDataFetcher:
         return merged_df
 
     async def fetch_and_combine_data(self) -> pd.DataFrame:
+        # Fetch ETFDB active data first
+        etfdb_df = await self.fetch_actively_managed_etfs(max_pages=10)
+        # Then fetch stock analysis data
         stockanalysis_df = await self.fetch_stockanalysis_data()
-        etfdb_df = await self.fetch_etfdb_data()
         return self.merge_data(stockanalysis_df, etfdb_df)
 
 
@@ -707,7 +684,7 @@ def display_export_section(df: pd.DataFrame) -> None:
                 )
 
 def main() -> None:
- 
+   
     st.title("📈 ETF Explorer Pro")
     st.markdown("""
     Comprehensive ETF analysis platform with advanced filtering, visualization,
