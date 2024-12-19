@@ -2,7 +2,7 @@ import asyncio
 from typing import Dict, Optional
 from datetime import datetime
 import logging
-from dotenv import load_dotenv
+
 import streamlit as st
 from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 import pandas as pd
@@ -23,7 +23,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-load_dotenv()
+
+st.set_page_config(
+    layout="wide",
+    page_title="ETF Explorer Pro",
+    page_icon="📈",
+    initial_sidebar_state="expanded"
+)
 
 @st.cache_data()
 def ensure_playwright_setup() -> bool:
