@@ -17,15 +17,16 @@
     }
   },
   "updateContentCommand": [
-    "echo 'Installing system dependencies...'",
-    "sudo apt-get update && sudo apt-get install -y wget ca-certificates fonts-liberation libappindicator3-1 libnss3 libx11-xcb1 libxtst6 xdg-utils",
+    "echo 'Installing system dependencies for Playwright...'",
+    "sudo apt-get update && sudo apt-get install -y wget ca-certificates fonts-liberation libappindicator3-1 libnss3 libx11-xcb1 libxtst6 xdg-utils libgbm1 libdrm2 libxkbcommon0 libasound2",
     "echo 'Installing Python dependencies...'",
     "pip3 install --user -r requirements.txt",
     "pip3 install --user streamlit",
+    "pip3 install --user playwright",
     "echo '✅ Packages installed and Requirements met'"
   ],
   "postAttachCommand": {
-    "server": "pip3 install --user playwright && python3 -m playwright install --with-deps && streamlit run streamlit_app.py --server.enableCORS false --server.enableXsrfProtection false"
+    "server": "python3 -m playwright install --with-deps && streamlit run streamlit_app.py --server.enableCORS false --server.enableXsrfProtection false"
   },
   "portsAttributes": {
     "8501": {
