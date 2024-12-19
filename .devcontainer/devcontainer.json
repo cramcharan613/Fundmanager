@@ -16,7 +16,17 @@
       ]
     }
   },
-  "updateContentCommand": "[ -f packages.txt ] && sudo apt update && sudo apt upgrade -y && sudo xargs apt install -y <packages.txt; [ -f requirements.txt ] && pip3 install --user -r requirements.txt; pip3 install --user streamlit; sudo apt-get install -y wget ca-certificates fonts-liberation libappindicator3-1 libnss3 libx11-xcb1 libxtst6 xdg-utils; python3 -m playwright install --with-deps; echo '✅ Packages installed and Requirements met'",
+  "updateContentCommand": [
+    "echo 'Installing system dependencies...'",
+    "sudo apt-get update && sudo apt-get install -y wget ca-certificates fonts-liberation libappindicator3-1 libnss3 libx11-xcb1 libxtst6 xdg-utils",
+    "echo 'Installing Python dependencies...'",
+    "pip3 install --user -r requirements.txt",
+    "pip3 install --user streamlit",
+    "echo 'Installing Playwright...'",
+    "python3 -m playwright install --with-deps",
+    "sudo playwright install",
+    "echo '✅ Packages installed and Requirements met'"
+  ],
   "postAttachCommand": {
     "server": "streamlit run streamlit_app.py --server.enableCORS false --server.enableXsrfProtection false"
   },
