@@ -1,4 +1,3 @@
-```python
 import asyncio
 from typing import Dict, Optional
 from datetime import datetime
@@ -774,4 +773,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-```
