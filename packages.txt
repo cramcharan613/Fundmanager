@@ -1,3 +1,4 @@
+
 wget
 ca-certificates
 fonts-liberation
@@ -19,19 +20,3 @@ libxfixes3
 libxkbcommon0
 libxrandr2
 xdg-utils
-libxslt1.1
-libwoff2dec1
-libevent-2.1
-libopus
-libflite
-libwebpdemux
-libharfbuzz-icu
-libwebpmux
-libenchant-2
-libsecret-1
-libhyphen
-libmanette-0.2
-libEGL
-libgudev-1.0
-libGLESv2
-libx264
