@@ -693,12 +693,7 @@ def display_export_section(df: pd.DataFrame) -> None:
                 )
 
 def main() -> None:
-    st.set_page_config(
-        layout="wide",
-        page_title="ETF Explorer Pro",
-        page_icon="📈",
-        initial_sidebar_state="expanded"
-    )
+
     st.title("📈 ETF Explorer Pro")
     st.markdown("""
     Comprehensive ETF analysis platform with advanced filtering, visualization,
@@ -758,4 +753,10 @@ def main() -> None:
             logger.error(f"Grid error: {str(e)}")
 
 if __name__ == "__main__":
+    st.set_page_config(
+        layout="wide",
+        page_title="ETF Explorer Pro",
+        page_icon="📈",
+        initial_sidebar_state="expanded"
+    )
     main()
