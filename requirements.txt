@@ -1,12 +1,10 @@
 streamlit
 numpy
-python-dotenv
 streamlit-aggrid
 pandas
 requests
 urllib3
-playwright
 openpyxl
 xlsxwriter
 aiohttp
-bs4
+
