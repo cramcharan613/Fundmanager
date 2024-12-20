@@ -246,71 +246,232 @@ def get_grid_options() -> Dict:
 
 def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> Dict:
     gb = GridOptionsBuilder.from_dataframe(df)
-    custom_css = {
-        ".ag-status-bar": {
-            "font-size": "16px",
-            "font-weight": "bold",
-            "color": "#333",
-        },
-        ".ag-status-bar .ag-status-name-value": {
-            "font-size": "16px",
+    
+    # Enhanced cell styling
+    cell_style_jscode = JsCode("""
+    function(params) {
+        if (params.column.colId === 'EXPENSE_RATIO') {
+            const value = parseFloat(params.value);
+            if (value > 1.0) {
+                return {
+                    'color': '#FF4136',
+                    'font-weight': 'bold',
+                    'background-color': 'rgba(255, 65, 54, 0.1)'
+                };
+            } else if (value < 0.3) {
+                return {
+                    'color': '#2ECC40',
+                    'font-weight': 'bold',
+                    'background-color': 'rgba(46, 204, 64, 0.1)'
+                };
+            }
+        }
+        if (params.column.colId === 'ASSETS_UNDER_MANAGEMENT') {
+            const value = parseFloat(params.value.replace(/[^0-9.-]+/g,""));
+            if (value > 10000) {
+                return {
+                    'color': '#0074D9',
+                    'font-weight': 'bold',
+                    'background-color': 'rgba(0, 116, 217, 0.1)'
+                };
+            }
+        }
+        return null;
+    }
+    """)
+
+    # Enhanced tooltips
+    tooltip_jscode = JsCode("""
+    function(params) {
+        if (params.column.colId === 'EXPENSE_RATIO') {
+            const value = parseFloat(params.value);
+            if (value > 1.0) {
+                return 'High expense ratio - Consider alternatives';
+            } else if (value < 0.3) {
+                return 'Low expense ratio - Cost efficient';
+            }
+        }
+        if (params.column.colId === 'TICKER_SYMBOL') {
+            return `Click for detailed analysis of ${params.value}`;
+        }
+        return params.value;
+    }
+    """)
+
+    # Custom column menu items
+    custom_menu_items = JsCode("""
+    function(params) {
+        return [
+            'filterMenuTab',
+            {
+                name: 'Custom Filter',
+                action: function() {
+                    console.log('Custom filter clicked');
+                    params.api.setQuickFilter(params.value);
+                }
+            },
+            {
+                name: 'Export Column',
+                action: function() {
+                    const columnData = [];
+                    params.api.forEachNode(node => columnData.push(node.data[params.column.colId]));
+                    console.log('Column data:', columnData);
+                }
+            },
+            'separator',
+            'columns'
+        ];
+    }
+    """)
+
+    # Row click handler
+    row_click_handler = JsCode("""
+    function(e) {
+        if (e.event.shiftKey) {
+            // Handle shift+click
+            console.log('Shift clicked row:', e.data);
+        } else if (e.event.ctrlKey || e.event.metaKey) {
+            // Handle ctrl/cmd+click
+            console.log('Ctrl/Cmd clicked row:', e.data);
+        } else {
+            // Handle normal click
+            console.log('Clicked row:', e.data);
         }
     }
+    """)
 
+    # Column value formatter
+    aum_formatter = JsCode("""
+    function(params) {
+        if (!params.value) return '';
+        const num = parseFloat(params.value.replace(/[^0-9.-]+/g,""));
+        if (num >= 1000) {
+            return '$' + (num/1000).toFixed(1) + 'B';
+        }
+        return '$' + num.toFixed(0) + 'M';
+    }
+    """)
+
+    # Configure default column settings
     gb.configure_default_column(
         editable=True,
         sortable=True,
         filter=True,
         resizable=True,
+        cellStyle=cell_style_jscode,
+        tooltipComponent=tooltip_jscode,
+        menuTabs=['generalMenuTab', 'filterMenuTab', 'columnsMenuTab'],
         wrapHeaderText=True,
-        autoHeaderLabel=True,
-        autoHeaderTooltip=True,
-        autoHeaderCellFilter=True,
-        autoHeaderCellRenderer=True,
         autoHeaderHeight=True,
-        filterParams={
-            'filterOptions': [
-                'equals', 'notEqual', 'contains',
-                'notContains', 'startsWith', 'endsWith'
-            ],
-            'defaultOption': 'contains'
-        },
-        menuTabs=['generalMenuTab', 'filterMenuTab', 'columnsMenuTab']
+        enablePivot=True,
+        enableValue=True,
+        enableRowGroup=True
     )
 
-    if group_by_column and group_by_column in df.columns:
-        gb.configure_column(group_by_column, rowGroup=True, hide=True)
+    # Configure specific columns
+    gb.configure_column(
+        'TICKER_SYMBOL',
+        pinned='left',
+        cellRenderer=JsCode("""
+        function(params) {
+            return `<a href="#" style="text-decoration: none; font-weight: bold; color: #2196F3;">
+                ${params.value}
+                <span style="font-size: 12px; margin-left: 5px;">📊</span>
+            </a>`;
+        }
+        """)
+    )
 
-    gb.configure_selection('multiple', use_checkbox=True, groupSelectsChildren=True, header_checkbox=True)
-    gb.configure_grid_options(rowHeight=50, paginationPageSize=20, onFirstDataRendered='onFirstDataRendered')
+    gb.configure_column(
+        'ASSETS_UNDER_MANAGEMENT',
+        valueFormatter=aum_formatter,
+        type='numericColumn'
+    )
 
-    status_panels = {
-        "statusPanels": [
-            {"statusPanel": "agTotalAndFilteredRowCountComponent", "align": "left"},
-            {"statusPanel": "agTotalRowCountComponent", "align": "center"},
-            {"statusPanel": "agFilteredRowCountComponent", "align": "center"},
-            {"statusPanel": "agSelectedRowCountComponent", "align": "right"},
-            {"statusPanel": "agAggregationComponent", "align": "right"}
-        ]
-    }
+    gb.configure_column(
+        'EXPENSE_RATIO',
+        type='numericColumn',
+        cellEditor='agNumberCellEditor',
+        cellEditorParams={'precision': 2}
+    )
 
-    grid_options = get_grid_options()
+    # Configure grid features
     gb.configure_grid_options(
-        statusBar=status_panels,
-        **grid_options,
-        rowStyle={
-            'background-color': 'rgba(0, 0, 0, 0.05)',
-            'border-radius': '10px',
-            'box-shadow': '0px 1px 5px rgba(0, 0, 0, 0.2)',
-            'margin-bottom': '5px',
-            'padding': '10px'
+        # Row features
+        rowSelection='multiple',
+        rowMultiSelectWithClick=True,
+        rowDragManaged=True,
+        onRowClicked=row_click_handler,
+        getRowClass=JsCode("""
+        function(params) {
+            if (params.data && params.data.EXPENSE_RATIO) {
+                const value = parseFloat(params.data.EXPENSE_RATIO);
+                if (value > 1.5) return 'high-expense-row';
+                if (value < 0.2) return 'low-expense-row';
+            }
+            return '';
+        }
+        """),
+        
+        # Selection features
+        enableRangeSelection=True,
+        enableRangeHandle=True,
+        suppressRowClickSelection=False,
+        
+        # Grouping features
+        groupSelectsChildren=True,
+        groupSelectsFiltered=True,
+        
+        # UI features
+        enableCharts=True,
+        enableRangeHandle=True,
+        enableFillHandle=True,
+        suppressMovableColumns=False,
+        
+        # Data features
+        enableCellChangeFlash=True,
+        enableCellTextSelection=True,
+        
+        # Export features
+        enableCsvExport=True,
+        enableExcelExport=True,
+        
+        # Filtering features
+        enableAdvancedFilter=True,
+        floatingFilter=True,
+        
+        # Custom features
+        getContextMenuItems=custom_menu_items,
+        
+        # Status bar configuration
+        statusBar={
+            'statusPanels': [
+                {
+                    'statusPanel': 'agTotalAndFilteredRowCountComponent',
+                    'align': 'left'
+                },
+                {
+                    'statusPanel': 'agAggregationComponent',
+                    'statusPanelParams': {
+                        'aggFuncs': ['sum', 'avg', 'min', 'max']
+                    }
+                },
+                {
+                    'statusPanel': 'agSelectedRowCountComponent'
+                },
+                {
+                    'statusPanel': 'customStatsPanel',
+                    'statusPanelParams': {
+                        'template': 
+                            '<span class="ag-status-name-value">' +
+                            'Selected AUM: <strong>${VALUE}</strong>' +
+                            '</span>'
+                    }
+                }
+            ]
         },
-        headerStyle={
-            'background-color': 'rgba(0, 0, 0, 0.1)',
-            'border-radius': '10px',
-            'box-shadow': '0px 1px 5px rgba(0, 0, 0, 0.2)',
-            'padding': '10px'
-        },
+        
+        # Sidebar configuration
         sideBar={
             'toolPanels': [
                 {
@@ -318,161 +479,53 @@ def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> D
                     'labelDefault': 'Columns',
                     'labelKey': 'columns',
                     'iconKey': 'columns',
-                    'toolPanel': 'agColumnsToolPanel'
+                    'toolPanel': 'agColumnsToolPanel',
                 },
                 {
                     'id': 'filters',
                     'labelDefault': 'Filters',
                     'labelKey': 'filters',
                     'iconKey': 'filter',
-                    'toolPanel': 'agFiltersToolPanel'
+                    'toolPanel': 'agFiltersToolPanel',
+                },
+                {
+                    'id': 'customStats',
+                    'labelDefault': 'Statistics',
+                    'labelKey': 'statistics',
+                    'iconKey': 'chart',
+                    'toolPanel': 'customStatsPanel'
                 }
             ],
-            'defaultToolPanel': ''
-        },
+            'position': 'right',
+            'defaultToolPanel': 'filters'
+        }
     )
 
-    # Button renderer for ACTION column
-    button_renderer = JsCode('''
-        class ButtonRenderer {
-            init(params) {
-                this.eGui = document.createElement('button');
-                this.eGui.innerHTML = '📈 View Chart';
-                this.eGui.style.cssText = `
-                    background: linear-gradient(45deg, #2196F3, #21CBF3);
-                    color: white;
-                    border: none;
-                    padding: 5px 15px;
-                    border-radius: 5px;
-                    cursor: pointer;
-                    font-weight: bold;
-                    transition: all 0.3s ease;
-                    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-                `;
-                this.eGui.addEventListener('mouseover', () => {
-                    this.eGui.style.transform = 'translateY(-2px)';
-                    this.eGui.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
-                });
-                this.eGui.addEventListener('mouseout', () => {
-                    this.eGui.style.transform = 'translateY(0)';
-                    this.eGui.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
-                });
-                this.eGui.addEventListener('click', () => {
-                    const modal = document.createElement('div');
-                    modal.style.cssText = `
-                        position: fixed;
-                        top: 0;
-                        left: 0;
-                        width: 100%;
-                        height: 100%;
-                        background: rgba(0,0,0,0.8);
-                        display: flex;
-                        justify-content: center;
-                        align-items: center;
-                        z-index: 1000;
-                        backdrop-filter: blur(5px);
-                    `;
-                    const modalContent = document.createElement('div');
-                    modalContent.style.cssText = `
-                        background: #1E1E1E;
-                        padding: 20px;
-                        border-radius: 15px;
-                        width: 90%;
-                        height: 90%;
-                        position: relative;
-                        box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-                        border: 1px solid rgba(255,255,255,0.1);
-                    `;
-                    const closeBtn = document.createElement('button');
-                    closeBtn.innerHTML = '✕';
-                    closeBtn.style.cssText = `
-                        position: absolute;
-                        top: 15px;
-                        right: 15px;
-                        background: rgba(255,255,255,0.1);
-                        color: #fff;
-                        border: none;
-                        border-radius: 50%;
-                        width: 30px;
-                        height: 30px;
-                        cursor: pointer;
-                        font-size: 16px;
-                        transition: all 0.3s ease;
-                    `;
-                    closeBtn.addEventListener('mouseover', () => {
-                        closeBtn.style.background = 'rgba(255,255,255,0.2)';
-                        closeBtn.style.transform = 'scale(1.1)';
-                    });
-                    closeBtn.addEventListener('mouseout', () => {
-                        closeBtn.style.background = 'rgba(255,255,255,0.1)';
-                        closeBtn.style.transform = 'scale(1)';
-                    });
-                    closeBtn.onclick = () => {
-                        modal.style.opacity = '0';
-                        setTimeout(() => document.body.removeChild(modal), 300);
-                    };
-
-                    modalContent.appendChild(closeBtn);
-                    modal.appendChild(modalContent);
-                    document.body.appendChild(modal);
-
-                    const ticker = params.data.TICKER_SYMBOL;
-                    const widgetContainer = document.createElement('div');
-                    widgetContainer.className = 'tradingview-widget-container';
-                    widgetContainer.style.cssText = `
-                        width: 100%;
-                        height: calc(100% - 40px);
-                    `;
-                    const widgetDiv = document.createElement('div');
-                    widgetDiv.className = 'tradingview-widget-container__widget';
-                    widgetDiv.style.cssText = `
-                        width: 100%;
-                        height: 100%;
-                    `;
-                    widgetContainer.appendChild(widgetDiv);
-                    modalContent.appendChild(widgetContainer);
-
-                    const script = document.createElement('script');
-                    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
-                    script.async = true;
-                    script.innerHTML = JSON.stringify({
-                        "autosize": true,
-                        "symbol": ticker,
-                        "interval": "D",
-                        "timezone": "Etc/UTC",
-                        "theme": "dark",
-                        "style": "1",
-                        "locale": "en",
-                        "enable_publishing": false,
-                        "allow_symbol_change": true,
-                        "calendar": true,
-                        "support_host": "https://www.tradingview.com",
-                        "width": "100%",
-                        "height": "100%",
-                        "save_image": true,
-                        "hideideas": true,
-                        "studies": [
-                            "MASimple@tv-basicstudies",
-                            "RSI@tv-basicstudies",
-                            "MACD@tv-basicstudies",
-                            "BB@tv-basicstudies"
-                        ],
-                        "show_popup_button": true,
-                        "popup_width": "1000",
-                        "popup_height": "650",
-                        "container_id": "tradingview_chart"
-                    });
-                    widgetContainer.appendChild(script);
-
-                    modal.style.opacity = '0';
-                    modal.style.transition = 'opacity 0.3s ease';
-                    setTimeout(() => modal.style.opacity = '1', 10);
-                });
-            }
-            getGui() { return this.eGui; }
+    # Custom CSS for grid
+    custom_css = {
+        ".ag-root-wrapper": {
+            "border-radius": "8px",
+            "overflow": "hidden",
+            "box-shadow": "0 2px 10px rgba(0,0,0,0.1)"
+        },
+        ".ag-header-cell": {
+            "background": "linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%)",
+            "font-weight": "600"
+        },
+        ".ag-row-hover": {
+            "background-color": "rgba(33, 150, 243, 0.1) !important"
+        },
+        ".high-expense-row": {
+            "background-color": "rgba(255, 65, 54, 0.05)"
+        },
+        ".low-expense-row": {
+            "background-color": "rgba(46, 204, 64, 0.05)"
+        },
+        ".ag-status-bar": {
+            "font-size": "12px",
+            "padding": "8px"
         }
-    ''')
-    gb.configure_column('ACTION', headerName="CHART", cellRenderer=button_renderer)
+    }
 
     return gb.build(), custom_css
 
