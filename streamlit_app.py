@@ -545,16 +545,26 @@ def main() -> None:
         export_buttons = """
         <script>
             function exportToExcel() {
-                const gridOptions = window.streamlitAgGrid.gridOptions;
-                gridOptions.api.exportDataAsExcel();
+                const gridDiv = document.querySelector('.ag-root-wrapper'); 
+                if (gridDiv && gridDiv.__agGridInstance) {
+                    const gridOptions = gridDiv.__agGridInstance.gridOptions;
+                    gridOptions.api.exportDataAsExcel();
+                } else {
+                    console.error('AgGrid instance not found.');
+                }
             }
             function exportToCsv() {
-                const gridOptions = window.streamlitAgGrid.gridOptions;
-                gridOptions.api.exportDataAsCsv();
+                const gridDiv = document.querySelector('.ag-root-wrapper');
+                if (gridDiv && gridDiv.__agGridInstance) {
+                    const gridOptions = gridDiv.__agGridInstance.gridOptions;
+                    gridOptions.api.exportDataAsCsv();
+                } else {
+                    console.error('AgGrid instance not found.');
+                }
             }
         </script>
-        <button onclick="exportToExcel()">Export to Excel</button>
-        <button onclick="exportToCsv()">Export to CSV</button>
+        <button onclick="exportToExcel()" style="margin-right: 10px; padding: 10px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">Export to Excel</button>
+        <button onclick="exportToCsv()" style="padding: 10px; background-color: #2196F3; color: white; border: none; border-radius: 5px; cursor: pointer;">Export to CSV</button>
         """
         st.components.v1.html(export_buttons, height=50)
 
