@@ -454,7 +454,30 @@ def show_tradingview_analysis(ticker: str):
     with tab3:
         st.components.v1.html(create_tradingview_company_profile(ticker), height=450)
 
-
+@st.dialog("Export Options")
+def export_dialog(data):
+    st.write("Choose your export file format:")
+    export_format = st.radio("Select Export Format", ["CSV", "Excel"])
+    
+    if st.button("Export"):
+        if export_format == "CSV":
+            st.download_button(
+                label="Download CSV",
+                data=data.to_csv(index=False).encode('utf-8'),
+                file_name="exported_data.csv",
+                mime="text/csv"
+            )
+        elif export_format == "Excel":
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                data.to_excel(writer, index=False, sheet_name='Sheet1')
+            output.seek(0)
+            st.download_button(
+                label="Download Excel",
+                data=output,
+                file_name="exported_data.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 def main() -> None:
     st.title("📈 ETF Explorer Pro")
     st.markdown("Explore ETFs with infinite scrolling, custom CSS, JS interactivity, filtering, exporting, and TradingView integration.")
@@ -512,27 +535,7 @@ def main() -> None:
 
         # Trigger modal for export options
         if st.button("Export Data"):
-            with st.dialog("Export Options"):
-                export_format = st.radio("Choose file type:", ["CSV", "Excel"], index=0)
-                if st.button("Confirm Export"):
-                    if export_format == "CSV":
-                        st.download_button(
-                            label="Download CSV",
-                            data=response['data'].to_csv(index=False).encode('utf-8'),
-                            file_name="exported_data.csv",
-                            mime="text/csv"
-                        )
-                    elif export_format == "Excel":
-                        output = io.BytesIO()
-                        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                            pd.DataFrame(response['data']).to_excel(writer, index=False, sheet_name='Sheet1')
-                        output.seek(0)
-                        st.download_button(
-                            label="Download Excel",
-                            data=output,
-                            file_name="exported_data.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
+            export_dialog(pd.DataFrame(response['data']))
 
 if __name__ == "__main__":
     main()
