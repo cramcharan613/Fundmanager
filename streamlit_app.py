@@ -511,7 +511,7 @@ def main() -> None:
         )
 
         # Trigger modal for export options
-         if st.button("Export Data"):
+        if st.button("Export Data"):
             with st.dialog("Export Options"):
                 export_format = st.radio("Choose file type:", ["CSV", "Excel"], index=0)
                 if st.button("Confirm Export"):
