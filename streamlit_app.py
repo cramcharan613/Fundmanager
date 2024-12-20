@@ -21,11 +21,26 @@ st.set_page_config(
 # Custom CSS
 st.markdown("""
 <style>
+:root {
+    --primary-color: #2196F3;
+    --secondary-color: #21CBF3;
+    --background-color: var(--background-color);
+    --text-color: var(--text-color);
+}
+
+/* Dark mode specific styles */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --background-color: #1E1E1E;
+        --text-color: #FFFFFF;
+    }
+}
+
 body {
     font-family: "Inter", sans-serif;
     margin: 0;
     padding: 0;
-    background: var(--bg-color);
+    background: var(--background-color);
     color: var(--text-color);
 }
 
@@ -33,22 +48,32 @@ body {
     padding: 1rem;
 }
 
-h1, h2, h3 {
-    font-weight: 700;
+.custom-card {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 1rem;
+    margin: 1rem 0;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.highlighted-row {
-    background-color: rgba(255, 215, 0, 0.3) !important;
+.metric-card {
+    background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+    color: white;
+    padding: 1rem;
+    border-radius: 10px;
+    text-align: center;
+    transition: transform 0.3s ease;
 }
 
-.ag-root-wrapper {
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+.metric-card:hover {
+    transform: translateY(-5px);
 }
 
+/* Enhanced button styles */
 .stButton>button {
-    background: linear-gradient(45deg, #2196F3, #21CBF3);
+    background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
     color: white !important;
     border: none;
     border-radius: 5px;
@@ -56,9 +81,17 @@ h1, h2, h3 {
     transition: all 0.3s ease;
     padding: 0.5rem 1rem;
 }
+
 .stButton>button:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+/* Enhanced grid styles */
+.ag-theme-streamlit {
+    --ag-header-background-color: var(--secondary-background-color);
+    --ag-odd-row-background-color: var(--background-color);
+    --ag-row-hover-color: rgba(33, 150, 243, 0.1);
 }
 </style>
 """, unsafe_allow_html=True)
