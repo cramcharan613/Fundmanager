@@ -1,24 +1,146 @@
 import asyncio
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Any
 from datetime import datetime
 import logging
 import streamlit as st
-from st_aggrid import AgGrid, GridOptionsBuilder, DataReturnMode, GridUpdateMode
+from st_aggrid import AgGrid, GridOptionsBuilder, JsCode, DataReturnMode, GridUpdateMode
 import pandas as pd
+import json
 import io
 import xlsxwriter
+import time
 import aiohttp
+from functools import lru_cache
+import concurrent.futures
+from dataclasses import dataclass
+from streamlit_javascript import st_javascript
 
+# Enhanced page config with custom theme
 st.set_page_config(
     layout="wide",
     page_title="ETF Explorer Pro",
-    page_icon="📈"
+    page_icon="📈",
+    initial_sidebar_state="expanded"
 )
 
-logging.basicConfig(level=logging.INFO)
+# Custom CSS for enhanced visuals
+st.markdown("""
+<style>
+    /* Main app styling */
+    .stApp {
+        max-width: 100%;
+        padding: 1rem;
+    }
+    
+    /* Card-like containers */
+    .stats-card {
+        background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
+        border-radius: 10px;
+        padding: 1.5rem;
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.1);
+        margin-bottom: 1rem;
+        transition: transform 0.3s ease;
+    }
+    
+    .stats-card:hover {
+        transform: translateY(-5px);
+    }
+    
+    /* Enhanced headers */
+    h1 {
+        background: linear-gradient(45deg, #2196F3, #21CBF3);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-weight: 700;
+    }
+    
+    /* Custom button styling */
+    .stButton>button {
+        background: linear-gradient(45deg, #2196F3, #21CBF3);
+        color: white;
+        border: none;
+        padding: 0.5rem 1rem;
+        border-radius: 5px;
+        font-weight: bold;
+        transition: all 0.3s ease;
+    }
+    
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    
+    /* Enhanced select boxes */
+    .stSelectbox {
+        border-radius: 5px;
+    }
+    
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background: rgba(255,255,255,0.1);
+        border-radius: 4px;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: rgba(33,150,243,0.5);
+        border-radius: 4px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+        background: rgba(33,150,243,0.8);
+    }
+    
+    /* AG-Grid custom styling */
+    .ag-theme-streamlit .ag-root-wrapper {
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    /* Loading animation */
+    .loading-spinner {
+        display: inline-block;
+        width: 50px;
+        height: 50px;
+        border: 3px solid rgba(255,255,255,.3);
+        border-radius: 50%;
+        border-top-color: #2196F3;
+        animation: spin 1s ease-in-out infinite;
+    }
+    
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Enhanced logging configuration
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
-class ETFDataFetcher:
+@dataclass
+class ETFData:
+    """Data class for ETF information"""
+    ticker: str
+    issuer: str
+    description: str
+    asset_class: str
+    inception_date: str
+    aum: float
+    expense_ratio: float
+    holdings: int
+
+class CachedETFDataFetcher:
+    """Enhanced ETF data fetcher with caching and parallel processing"""
     def __init__(self):
         self.stockanalysis_url = (
             "https://api.stockanalysis.com/api/screener/e/bd/"
@@ -26,245 +148,234 @@ class ETFDataFetcher:
             "aum+close+holdings+price+cusip+isin+etfCategory+"
             "expenseRatio+etfIndex+etfRegion+etfCountry+optionable.json"
         )
+        self.cache_timeout = 3600  # 1 hour cache
 
-    def preprocess_numeric_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        numeric_columns = [
-            'CURRENT_PRICE', 'CLOSING_PRICE',
-            'ASSETS_UNDER_MANAGEMENT', 'EXPENSE_RATIO'
-        ]
-        for col in numeric_columns:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
-                if col in ['CURRENT_PRICE', 'CLOSING_PRICE', 'ASSETS_UNDER_MANAGEMENT']:
-                    df[col] = df[col].apply(lambda x: f"${x:,.2f}" if pd.notnull(x) else '')
-                elif col == 'EXPENSE_RATIO':
-                    df[col] = df[col].apply(lambda x: f"{x:.2%}" if pd.notnull(x) else '')
-        return df
+    @lru_cache(maxsize=1)
+    async def fetch_data(self) -> pd.DataFrame:
+        """Fetch ETF data with caching"""
+        async with aiohttp.ClientSession() as session:
+            async with session.get(self.stockanalysis_url) as resp:
+                raw_data = await resp.json()
+                return self._process_data(raw_data)
 
-    async def fetch_stockanalysis_data(self) -> pd.DataFrame:
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(self.stockanalysis_url) as resp:
-                    resp.raise_for_status()
-                    raw_data = await resp.json()
-
-            if raw_data and 'data' in raw_data:
-                raw = raw_data.get("data", {})
-                df = (
-                    pd.DataFrame()
-                    .from_dict(raw.get("data", {}))
-                    .T.reset_index()
-                    .rename(columns=str.upper)
-                    .rename(
-                        columns={
-                            "INDEX": "TICKER_SYMBOL",
-                            "ISSUER": "ETF_ISSUER",
-                            "N": "ETF_DESCRIPTION",
-                            "ASSETCLASS": "ASSET_CLASS",
-                            "INCEPTIONDATE": "INCEPTION_DATE",
-                            "EXCHANGE": "LISTED_EXCHANGE",
-                            "ETFLEVERAGE": "LEVERAGE",
-                            "AUM": "ASSETS_UNDER_MANAGEMENT",
-                            "CLOSE": "CLOSING_PRICE",
-                            "HOLDINGS": "NUMBER_OF_HOLDINGS",
-                            "PRICE": "CURRENT_PRICE",
-                            "ETFCATEGORY": "ETF_CATEGORY",
-                            "EXPENSERATIO": "EXPENSE_RATIO",
-                            "ETFINDEX": "TRACKING_INDEX",
-                            "ETFREGION": "GEOGRAPHIC_REGION",
-                            "ETFCOUNTRY": "COUNTRY_FOCUS",
-                            "OPTIONABLE": "HAS_OPTIONS",
-                            "CUSIP": "CUSIP"
-                        }
-                    )
-                )
-                df = self.preprocess_numeric_data(df)
-                if 'CUSIP' in df.columns:
-                    cols = ['CUSIP'] + [c for c in df.columns if c != 'CUSIP']
-                    df = df[cols]
-                return df
-            else:
-                logger.error("Failed to fetch or process Stock Analysis data")
-                return pd.DataFrame()
-        except Exception as e:
-            logger.error(f"Error fetching Stock Analysis data: {str(e)}")
+    def _process_data(self, raw_data: Dict) -> pd.DataFrame:
+        """Process raw data with parallel processing"""
+        if not raw_data or 'data' not in raw_data:
             return pd.DataFrame()
 
-@st.cache_data()
-def load_data():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    fetcher = ETFDataFetcher()
-    return loop.run_until_complete(fetcher.fetch_stockanalysis_data())
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            processed_data = list(executor.map(
+                self._process_etf_entry,
+                raw_data['data']['data'].items()
+            ))
 
-def get_grid_options() -> Dict:
-    return {
-        'enableRangeSelection': True,
-        'enableCharts': True,
-        'suppressRowClickSelection': False,
-        'enableSorting': True,
-        'enableFilter': True,
-        'enableColResize': True,
-        'rowSelection': 'multiple',
-        'enableStatusBar': True,
-        'enableFillHandle': True,
-        'enableRangeHandle': True,
-        'enableCellChangeFlash': True,
-        'enableCellTextSelection': True,
-        'enableClipboard': True,
-        'enableGroupEdit': True,
-        'enableCellExpressions': True,
-        'enableBrowserTooltips': True,
-        'enableAdvancedFilter': True,
-        'enableContextMenu': True,
-        'enableUndoRedo': True,
-        'enableCsvExport': True,
-        'enableExcelExport': True,
-        'enablePivotMode': True,
-        'enableValue': True,
-        'enablePivoting': True,
-        'enableRowGroup': True,
-        'enableQuickFilter': True,
-        'floatingFilter': True,
-        'includeRowGroupColumns': True,
-        'includeValueColumns': True,
-        'includePivotColumns': True,
-        'pagination': False,  # no pagination for infinite scrolling
-        'rowModelType': 'clientSide'
-    }
+        df = pd.DataFrame(processed_data)
+        return self._enhance_dataframe(df)
 
-# Custom class representing an ETF object
-class ETF:
-    def __init__(self, data: Dict[str, str]):
-        self.data = data
-
-    def _repr_html_(self):
-        # Create a small HTML table to display the ETF data
-        html = "<table border='1' style='border-collapse: collapse; font-family: sans-serif; font-size:14px;'>"
-        html += "<tr><th colspan='2' style='background:#ddd; padding:8px; text-align:center;'>ETF Details</th></tr>"
-        for k, v in self.data.items():
-            html += f"<tr><td style='padding:8px; background:#f7f7f7; font-weight:bold;'>{k}</td><td style='padding:8px;'>{v}</td></tr>"
-        html += "</table>"
-        return html
-
-def main():
-    st.title("📈 ETF Explorer Pro")
-    st.markdown("""
-    Explore ETFs with interactive filtering, grouping, pivoting, and infinite scrolling.
-    Use the native Streamlit theme toggle to switch between dark and light modes.
-    """)
-
-    with st.spinner("Loading ETF data..."):
-        etf_data = load_data()
-
-    if etf_data.empty:
-        st.error("No data available.")
-        return
-
-    col1, col2 = st.columns([1,9])
-
-    with col1:
-        unique_issuers = etf_data['ETF_ISSUER'].dropna().unique()
-        selected_issuer = st.selectbox("Filter by ETF Issuer", ["All"] + sorted(unique_issuers.tolist()), index=0)
-        group_by_issuer = st.checkbox("Group by ETF Issuer", value=False)
-
-        export_format = st.selectbox("Export Format", ["CSV", "Excel"], key="export_format")
-        if export_format:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            if export_format.lower() == 'csv':
-                buffer = io.BytesIO()
-                etf_data.to_csv(buffer, index=False, encoding='utf-8')
-                buffer.seek(0)
-                bytes_data = buffer.getvalue()
-                filename = f"etf_data_{timestamp}.csv"
-                mime_type = "text/csv"
-            else:
-                buffer = io.BytesIO()
-                with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                    etf_data.to_excel(writer, index=False, sheet_name='ETF_Data')
-                buffer.seek(0)
-                bytes_data = buffer.getvalue()
-                filename = f"etf_data_{timestamp}.xlsx"
-                mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            st.download_button(
-                label=f"Download {export_format}",
-                data=bytes_data,
-                file_name=filename,
-                mime=mime_type
-            )
-
-    # No filtering done on the Python side except passing full df to grid
-    # We'll rely on the grid's filterModel if user selects an issuer
-    if selected_issuer == "All":
-        filter_model = {}
-    else:
-        filter_model = {
-            "ETF_ISSUER": {
-                "filterType": "text",
-                "type": "equals",
-                "filter": selected_issuer
-            }
+    @staticmethod
+    def _process_etf_entry(entry: tuple) -> Dict[str, Any]:
+        """Process individual ETF entry"""
+        ticker, data = entry
+        return {
+            'TICKER_SYMBOL': ticker,
+            'ETF_ISSUER': data.get('issuer', ''),
+            'ETF_DESCRIPTION': data.get('n', ''),
+            'ASSET_CLASS': data.get('assetClass', ''),
+            'INCEPTION_DATE': data.get('inceptionDate', ''),
+            'ASSETS_UNDER_MANAGEMENT': data.get('aum', 0),
+            'EXPENSE_RATIO': data.get('expenseRatio', 0),
+            'NUMBER_OF_HOLDINGS': data.get('holdings', 0),
+            'CURRENT_PRICE': data.get('price', 0),
+            'CUSIP': data.get('cusip', ''),
+            'ETF_CATEGORY': data.get('etfCategory', ''),
+            'TRACKING_INDEX': data.get('etfIndex', ''),
+            'GEOGRAPHIC_REGION': data.get('etfRegion', ''),
+            'COUNTRY_FOCUS': data.get('etfCountry', ''),
+            'HAS_OPTIONS': data.get('optionable', False)
         }
 
-    with col2:
-        quick_search = st.text_input("Global Quick Search", value="", help="Type to filter all columns globally")
+    def _enhance_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Enhance dataframe with additional metrics and formatting"""
+        # Format numeric columns
+        numeric_cols = {
+            'CURRENT_PRICE': '${:,.2f}',
+            'ASSETS_UNDER_MANAGEMENT': '${:,.2f}M',
+            'EXPENSE_RATIO': '{:.2%}'
+        }
 
-        gb = GridOptionsBuilder.from_dataframe(etf_data)
-        gb.configure_default_column(
-            editable=True,
-            sortable=True,
-            filter=True,
-            resizable=True,
-            wrapHeaderText=True,
-            autoHeaderLabel=True,
-            autoHeaderTooltip=True,
-            autoHeaderCellFilter=True,
-            autoHeaderCellRenderer=True,
-            autoHeaderHeight=True,
-            filterParams={
-                'filterOptions': ['equals', 'notEqual', 'contains', 'notContains', 'startsWith', 'endsWith'],
-                'defaultOption': 'contains'
-            },
-            menuTabs=['generalMenuTab', 'filterMenuTab', 'columnsMenuTab']
+        for col, fmt in numeric_cols.items():
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+                df[col] = df[col].apply(lambda x: fmt.format(x) if pd.notnull(x) else '')
+
+        # Add calculated metrics
+        df['YTD_PERFORMANCE'] = df['CURRENT_PRICE'].apply(
+            lambda x: f"{(float(x.replace('$', '').replace(',', '')) / 100 - 1):.2%}"
+            if isinstance(x, str) and x
+            else ''
         )
-        if group_by_issuer and "ETF_ISSUER" in etf_data.columns:
-            gb.configure_column("ETF_ISSUER", rowGroup=True, hide=True)
 
-        grid_options = get_grid_options()
-        gb.configure_grid_options(**grid_options)
+        return df
 
-        final_grid_options = gb.build()
+@st.cache_data(ttl=3600)
+def load_data() -> pd.DataFrame:
+    """Load ETF data with caching"""
+    fetcher = CachedETFDataFetcher()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    return loop.run_until_complete(fetcher.fetch_data())
 
-        # Apply filter model if issuer is selected
-        if filter_model:
-            final_grid_options["filterModel"] = filter_model
+def create_interactive_chart(ticker: str) -> None:
+    """Create interactive TradingView chart"""
+    chart_config = {
+        "symbol": ticker,
+        "interval": "D",
+        "timezone": "Etc/UTC",
+        "theme": "dark",
+        "style": "1",
+        "locale": "en",
+        "enable_publishing": False,
+        "allow_symbol_change": True,
+        "save_image": True,
+        "studies": [
+            "MASimple@tv-basicstudies",
+            "RSI@tv-basicstudies",
+            "MACD@tv-basicstudies",
+            "BB@tv-basicstudies"
+        ]
+    }
+    
+    st.components.v1.html(
+        f"""
+        <div class="tradingview-widget-container">
+            <div id="tradingview_chart"></div>
+            <script src="https://s3.tradingview.com/tv.js"></script>
+            <script>
+                new TradingView.widget({chart_config});
+            </script>
+        </div>
+        """,
+        height=600
+    )
 
-        if quick_search:
-            final_grid_options["quickFilterText"] = quick_search
+def main() -> None:
+    st.title("📈 ETF Explorer Pro")
+    
+    # Add app description with enhanced markdown
+    st.markdown("""
+    <div class="stats-card">
+        <h3>Welcome to ETF Explorer Pro</h3>
+        <p>An advanced ETF analysis platform with real-time data, interactive charts, and comprehensive filtering.</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-        response = AgGrid(
-            etf_data,
-            gridOptions=final_grid_options,
+    # Load data with progress indicator
+    with st.spinner("Loading ETF data..."):
+        etf_data = load_data()
+        if etf_data.empty:
+            st.error("❌ No data available. Please try again later.")
+            return
+
+    # Create layout
+    col1, col2, col3 = st.columns([2, 6, 2])
+
+    with col1:
+        st.markdown('<div class="stats-card">', unsafe_allow_html=True)
+        
+        # Enhanced filters
+        selected_issuer = st.selectbox(
+            "🏢 ETF Issuer",
+            options=["All"] + sorted(etf_data['ETF_ISSUER'].unique().tolist())
+        )
+        
+        selected_asset_class = st.selectbox(
+            "💼 Asset Class",
+            options=["All"] + sorted(etf_data['ASSET_CLASS'].unique().tolist())
+        )
+        
+        min_aum = st.slider(
+            "💰 Min AUM ($M)",
+            min_value=0,
+            max_value=int(etf_data['ASSETS_UNDER_MANAGEMENT'].max()),
+            value=0
+        )
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with col2:
+        # Filter data based on selections
+        filtered_data = etf_data.copy()
+        if selected_issuer != "All":
+            filtered_data = filtered_data[filtered_data['ETF_ISSUER'] == selected_issuer]
+        if selected_asset_class != "All":
+            filtered_data = filtered_data[filtered_data['ASSET_CLASS'] == selected_asset_class]
+        filtered_data = filtered_data[
+            filtered_data['ASSETS_UNDER_MANAGEMENT'].str.replace('$', '').str.replace(',', '').astype(float) >= min_aum
+        ]
+
+        # Display interactive grid
+        gb = GridOptionsBuilder.from_dataframe(filtered_data)
+        gb.configure_default_column(
+            editable=False,
+            sortable=True,
+            filterable=True,
+            resizable=True
+        )
+        
+        # Add chart button
+        gb.configure_column(
+            "TICKER_SYMBOL",
+            cellRenderer=JsCode("""
+            function(params) {
+                return `
+                    <div style="display: flex; align-items: center;">
+                        <span style="margin-right: 8px;">${params.value}</span>
+                        <button onclick="showChart('${params.value}')" 
+                                style="background: linear-gradient(45deg, #2196F3, #21CBF3);
+                                       color: white;
+                                       border: none;
+                                       padding: 4px 8px;
+                                       border-radius: 4px;
+                                       cursor: pointer;">
+                            📈 Chart
+                        </button>
+                    </div>
+                `;
+            }
+            """)
+        )
+
+        grid_response = AgGrid(
+            filtered_data,
+            gridOptions=gb.build(),
+            height=600,
             enable_enterprise_modules=True,
             update_mode=GridUpdateMode.MODEL_CHANGED,
             data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
-            fit_columns_on_grid_load=True,
-            width='100%',
-            height=800,
-            allow_unsafe_jscode=True,
-            theme='streamlit',
-            enable_quicksearch=True,
-            reload_data=True
+            theme='streamlit'
         )
 
-        selected_rows = response['selected_rows']
-
-# If selected_rows is a list of dictionaries (standard behavior from AgGrid):
-        if selected_rows and len(selected_rows) > 0:
-            st.subheader("Selected Rows Details")
-            etf_objects = [ETF(row) for row in selected_rows]
-            for etf_obj in etf_objects:
-                st.write(etf_obj)
+    with col3:
+        st.markdown('<div class="stats-card">', unsafe_allow_html=True)
+        st.subheader("📊 Summary Statistics")
+        
+        total_etfs = len(filtered_data)
+        total_aum = filtered_data['ASSETS_UNDER_MANAGEMENT'].str.replace('$', '').str.replace(',', '').astype(float).sum()
+        avg_expense = filtered_data['EXPENSE_RATIO'].str.rstrip('%').astype(float).mean()
+        
+        st.metric("Total ETFs", f"{total_etfs:,}")
+        st.metric("Total AUM", f"${total_aum:,.2f}M")
+        st.metric("Avg Expense Ratio", f"{avg_expense:.2%}")
+        
+        # Export options
+        st.download_button(
+            label="📥 Export to CSV",
+            data=filtered_data.to_csv(index=False).encode('utf-8'),
+            file_name=f"etf_data_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv"
+        )
+        
+        st.markdown('</div>', unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
