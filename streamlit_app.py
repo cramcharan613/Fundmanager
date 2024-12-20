@@ -11,6 +11,7 @@ import xlsxwriter
 import time
 import aiohttp
 
+# Set page config before any Streamlit commands
 st.set_page_config(
     layout="wide",
     page_title="ETF Explorer Pro",
@@ -18,22 +19,59 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Add custom CSS for styling
+# Add custom CSS for a more modern, less "Streamlit" look.
+# Using neutral backgrounds, subtle shadows, and a cleaner font style.
 st.markdown("""
 <style>
 body {
-    font-family: "Segoe UI", sans-serif;
-    background-color: #f8f9fa;
+    font-family: "Inter", sans-serif;
+    background: #f0f2f5;
+    color: #333;
 }
 .sidebar .sidebar-content {
-    background-color: #f8f9fa;
+    background: #f0f2f5;
 }
-h1, h2, h3, .stMarkdown {
+h1, h2, h3, h4, h5, h6 {
     font-weight: 600;
-    color: #333;
+    color: #222;
+    letter-spacing: 0.5px;
+}
+.stApp {
+    background: #f0f2f5;
+    padding: 1rem 2rem;
+}
+.block-container {
+    background: #fff;
+    border-radius: 10px;
+    padding: 2rem;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
 }
 .css-1cpxqw2 {
     font-size: 0.9rem;
+    color: #333;
+}
+.ag-header, .ag-root-wrapper, .ag-header-container, .ag-status-bar {
+    font-family: "Inter", sans-serif;
+}
+.ag-root-wrapper {
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+.button-container button {
+    background: linear-gradient(45deg, #2196F3, #21CBF3);
+    color: #fff !important;
+    border: none !important;
+    border-radius: 5px !important;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    transition: all 0.3s ease;
+    font-weight: 600;
+    font-size: 14px;
+    padding: 0.5rem 1rem;
+}
+.button-container button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
 }
 </style>
 """, unsafe_allow_html=True)
@@ -104,10 +142,18 @@ class ETFDataFetcher:
                             "ETFREGION": "GEOGRAPHIC_REGION",
                             "ETFCOUNTRY": "COUNTRY_FOCUS",
                             "OPTIONABLE": "HAS_OPTIONS",
+                            "CUSIP": "CUSIP"  # ensuring consistent naming
                         }
                     )
                 )
-                return self.preprocess_numeric_data(df)
+                df = self.preprocess_numeric_data(df)
+
+                # Move CUSIP column to the front if it exists
+                if 'CUSIP' in df.columns:
+                    cols = ['CUSIP'] + [c for c in df.columns if c != 'CUSIP']
+                    df = df[cols]
+
+                return df
             logger.error("Failed to fetch or process Stock Analysis data")
             return pd.DataFrame()
         except Exception as e:
@@ -193,8 +239,12 @@ def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> D
     if group_by_column and group_by_column in df.columns:
         gb.configure_column(group_by_column, rowGroup=True, hide=True)
 
-    # Enable pivoting and grouping in the UI
-    gb.configure_side_bar(filters_panel=True, columns_panel=True)
+    gb.configure_selection(
+        'multiple',
+        use_checkbox=True,
+        groupSelectsChildren=True,
+        header_checkbox=True
+    )
     gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=20)
 
     status_panels = {
@@ -212,16 +262,15 @@ def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> D
         statusBar=status_panels,
         **grid_options,
         rowStyle={
-            'background-color': 'rgba(0, 0, 0, 0.05)',
-            'border-radius': '10px',
-            'box-shadow': '0px 1px 5px rgba(0, 0, 0, 0.2)',
-            'margin-bottom': '5px',
-            'padding': '10px'
+            'background-color': '#fff',
+            'border-radius': '0px',
+            'box-shadow': 'none',
+            'margin-bottom': '0px',
+            'padding': '0px'
         },
         headerStyle={
-            'background-color': 'rgba(0, 0, 0, 0.1)',
-            'border-radius': '10px',
-            'box-shadow': '0px 1px 5px rgba(0, 0, 0, 0.2)',
+            'background-color': '#f0f2f5',
+            'border': 'none',
             'padding': '10px'
         },
         sideBar={
@@ -245,7 +294,6 @@ def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> D
         }
     )
 
-    # Add a chart button column
     button_renderer = JsCode('''
         class ButtonRenderer {
             init(params) {
@@ -388,6 +436,7 @@ def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> D
             }
         }
     ''')
+
     gb.configure_column('ACTION', headerName="CHART", cellRenderer=button_renderer)
 
     return gb.build(), custom_css
@@ -472,8 +521,10 @@ def display_export_section(df: pd.DataFrame) -> None:
 def main() -> None:
     st.title("📈 ETF Explorer Pro")
     st.markdown("""
-    Comprehensive ETF analysis platform with advanced filtering, visualization,
-    pivoting, and real-time data exploration.
+    **A modern, interactive platform for exploring and analyzing ETFs**:
+    - Real-time data from Stock Analysis API
+    - Advanced filtering, pivoting, grouping, and searching
+    - Export your filtered data to CSV or Excel
     """)
 
     try:
@@ -500,7 +551,7 @@ def main() -> None:
         with col2:
             group_by_issuer = st.checkbox("Group by ETF Issuer", value=False)
 
-        # Quick global search (quick filter)
+        # Quick global search
         quick_search = st.text_input("Quick Search (Global Filter)", value="", help="Type to filter all columns globally")
 
         filtered_data = (
@@ -519,11 +570,9 @@ def main() -> None:
                 group_by_column="ETF_ISSUER" if group_by_issuer else None
             )
 
-            # Enable quick filter in grid options
             if quick_search:
                 grid_options["quickFilterText"] = quick_search
 
-            # Return both filtered and sorted data, and also selected rows
             response = AgGrid(
                 filtered_data,
                 gridOptions=grid_options,
