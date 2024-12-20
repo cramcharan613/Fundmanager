@@ -243,6 +243,7 @@ def get_grid_options() -> Dict:
         'rowModelType': 'clientSide'
     }
 
+
 def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> Dict:
     gb = GridOptionsBuilder.from_dataframe(df)
     custom_css = {
