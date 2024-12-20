@@ -511,18 +511,11 @@ def main() -> None:
         )
 
         # Trigger modal for export options
-        if st.button("Export Data"):
-            st.session_state.show_modal = True
-
-        if st.session_state.get("show_modal", False):
-            with st.modal("Export Options"):
-                st.markdown("### Select Export Format")
-                export_format = st.radio("Choose file type", ["CSV", "Excel"])
-                confirm_export = st.button("Confirm Export")
-
-                if confirm_export:
+ if st.button("Export Data"):
+            with st.dialog("Export Options"):
+                export_format = st.radio("Choose file type:", ["CSV", "Excel"], index=0)
+                if st.button("Confirm Export"):
                     if export_format == "CSV":
-                        # Export as CSV
                         st.download_button(
                             label="Download CSV",
                             data=response['data'].to_csv(index=False).encode('utf-8'),
@@ -530,7 +523,6 @@ def main() -> None:
                             mime="text/csv"
                         )
                     elif export_format == "Excel":
-                        # Export as Excel
                         output = io.BytesIO()
                         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                             pd.DataFrame(response['data']).to_excel(writer, index=False, sheet_name='Sheet1')
@@ -541,7 +533,6 @@ def main() -> None:
                             file_name="exported_data.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         )
-                    st.session_state.show_modal = False
 
 if __name__ == "__main__":
     main()
