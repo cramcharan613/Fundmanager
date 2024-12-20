@@ -47,6 +47,12 @@ h1, h2, h3 {
     box-shadow: 0 2px 10px rgba(0,0,0,0.1);
 }
 
+.input-button-container {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
 .stButton>button {
     background: linear-gradient(45deg, #2196F3, #21CBF3);
     color: white !important;
@@ -61,32 +67,6 @@ h1, h2, h3 {
     box-shadow: 0 4px 8px rgba(0,0,0,0.2);
 }
 </style>
-""", unsafe_allow_html=True)
-st.markdown("""
-    <style>
-    .input-container {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-    }
-    .input-container > div {
-        flex: 1;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-# HTML structure for aligned input and button
-st.markdown("""
-    <div class="input-container">
-        <div>
-            <input type="text" id="quick_search" placeholder="Global Quick Search" style="width: 100%; padding: 0.5rem; border-radius: 4px; border: 1px solid #ccc;">
-        </div>
-        <div>
-            <button style="padding: 0.5rem 1rem; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                Export Data
-            </button>
-        </div>
-    </div>
 """, unsafe_allow_html=True)
 
 
