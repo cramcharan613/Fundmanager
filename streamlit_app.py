@@ -445,51 +445,6 @@ def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> D
 
     return gb.build(), custom_css
 
-def create_tradingview_technical_analysis(ticker: str) -> str:
-    return f"""
-    <div class="tradingview-widget-container">
-        <div class="tradingview-widget-container__widget"></div>
-        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js">
-        {{
-            "interval": "1m",
-            "width": "100%",
-            "isTransparent": false,
-            "height": "450",
-            "symbol": "{ticker}",
-            "showIntervalTabs": true,
-            "locale": "en",
-            "colorTheme": "dark"
-        }}
-        </script>
-    </div>
-    """
-
-def create_tradingview_company_profile(ticker: str) -> str:
-    return f"""
-    <div class="tradingview-widget-container">
-        <div class="tradingview-widget-container__widget"></div>
-        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-symbol-profile.js">
-        {{
-            "width": "100%",
-            "height": "400",
-            "colorTheme": "dark",
-            "isTransparent": false,
-            "symbol": "{ticker}",
-            "locale": "en"
-        }}
-        </script>
-    </div>
-    """
-
-def create_enhanced_tradingview_chart(ticker: str, container_id: str) -> str:
-    # The same code snippet for enhanced chart inserted here (omitted for brevity)
-    # Insert the previously provided chart code as is
-    return f"""
-    <div class="tradingview-widget-container" style="height: 100%; width: 100%;">
-        ...
-    </div>
-    """
-
 def show_tradingview_analysis(ticker: str):
     tab1, tab2, tab3 = st.tabs(["📈 Chart", "📊 Technical Analysis", "🏢 Profile"])
     with tab1:
@@ -545,7 +500,7 @@ def main() -> None:
                 bytes_data = buffer.getvalue()
                 filename = f"etf_data_{timestamp}.xlsx"
                 mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            
+
             st.download_button(label=f"Download {export_format}", data=bytes_data, file_name=filename, mime=mime_type)
 
         # Client-side toggle grouping
@@ -565,7 +520,6 @@ def main() -> None:
             </script>
             """, height=0, width=0)
 
-    # Apply filters
     filtered_data = etf_data.copy()
     if selected_issuer != "All":
         filtered_data = filtered_data[filtered_data['ETF_ISSUER'] == selected_issuer]
@@ -600,7 +554,7 @@ def main() -> None:
         selected_rows = response['selected_rows']
 
         highlight_button = st.button("Highlight Selected Rows")
-        if highlight_button and selected_rows and len(selected_rows) > 0:
+        if highlight_button and isinstance(selected_rows, list) and len(selected_rows) > 0:
             tickers_to_highlight = [row['TICKER_SYMBOL'] for row in selected_rows if isinstance(row, dict) and 'TICKER_SYMBOL' in row]
             if tickers_to_highlight:
                 st.components.v1.html(
@@ -622,7 +576,7 @@ def main() -> None:
                     width=0
                 )
 
-        if selected_rows and len(selected_rows) > 0:
+        if isinstance(selected_rows, list) and len(selected_rows) > 0:
             st.subheader("Selected Rows Details")
             etf_objects = [ETF(row) for row in selected_rows if isinstance(row, dict)]
             for etf_obj in etf_objects:
