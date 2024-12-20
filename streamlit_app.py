@@ -519,16 +519,18 @@ def main() -> None:
     filtered_data = filtered_data[numeric_filtered_aum >= min_aum]
 
     with col2:
-        quick_search = st.text_input("Global Quick Search", value="", help="Type to filter all columns globally")
-        final_grid_options, custom_css = configure_grid(filtered_data, group_by_column=None)
-        final_grid_options['onGridReady'] = """
-        function(params) {
-            window.gridApi = params.api;
-        }
-        """
-        if quick_search:
-            final_grid_options["quickFilterText"] = quick_search
-
+         final_grid_options, custom_css = configure_grid(filtered_data, group_by_column=None)
+        
+        col3, col4 = st.columns([1, 9])
+        with col3:
+            quick_search = st.text_input("Global Quick Search", value="", help="Type to filter all columns globally")
+       
+            if quick_search:
+                final_grid_options["quickFilterText"] = quick_search
+        with col4:
+            if st.button("Export Data"):
+                export_dialog(pd.DataFrame(response['data']))
+       
         response = AgGrid(
             filtered_data,
             gridOptions=final_grid_options,
@@ -546,32 +548,8 @@ def main() -> None:
         )
 
         # Trigger modal for export options
-        if st.button("Export Data"):
-            export_dialog(pd.DataFrame(response['data']))
-        export_buttons = """
-        <script>
-            function exportToExcelWithCustomOptions() {
-                if (window.gridApi) {
-                    window.gridApi.exportDataAsExcel({
-                        sheetName: 'ETF Data',
-                        fileName: 'ETF_Data_Export.xlsx',
-                        author: 'Streamlit User',
-                        columnGroups: true,  // Include column groups in export
-                        allColumns: true,    // Include all columns
-                        onlySelected: false, // Export all rows, not just selected
-                        suppressTextAsCDATA: true,
-                        suppressQuotes: true
-                    });
-                } else {
-                    console.error('Grid API not initialized.');
-                }
-            }
-        </script>
-        <button onclick="exportToExcelWithCustomOptions()" style="margin: 10px; padding: 10px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">Export to Excel</button>
-        """
-        st.components.v1.html(export_buttons, height=50)
 
-
+  
 if __name__ == "__main__":
     main()
 
