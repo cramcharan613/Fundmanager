@@ -128,17 +128,13 @@ class CachedETFDataFetcher:
     def _enhance_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
         df['CURRENT_PRICE'] = pd.to_numeric(df['CURRENT_PRICE'], errors='coerce')
         df['CURRENT_PRICE'] = df['CURRENT_PRICE'].apply(lambda x: f"${x:,.2f}" if pd.notnull(x) else '')
-
         df['ASSETS_UNDER_MANAGEMENT'] = pd.to_numeric(df['ASSETS_UNDER_MANAGEMENT'], errors='coerce')
         df['ASSETS_UNDER_MANAGEMENT'] = df['ASSETS_UNDER_MANAGEMENT'].apply(lambda x: f"${x:,.2f}M" if pd.notnull(x) else '')
-
         df['EXPENSE_RATIO'] = pd.to_numeric(df['EXPENSE_RATIO'], errors='coerce')
         df['EXPENSE_RATIO'] = df['EXPENSE_RATIO'].apply(lambda x: f"{x:.2%}" if pd.notnull(x) else '')
-
         if 'CUSIP' in df.columns:
             cols = ['CUSIP'] + [c for c in df.columns if c != 'CUSIP']
             df = df[cols]
-
         return df
 
 @st.cache_data(ttl=3600)
@@ -544,7 +540,7 @@ def main() -> None:
             data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
             fit_columns_on_grid_load=True,
             width='100%',
-            height=600,
+            height=1500,
             allow_unsafe_jscode=True,
             theme='streamlit',
             enable_quicksearch=True,
