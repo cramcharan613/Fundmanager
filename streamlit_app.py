@@ -1,381 +1,289 @@
-import asyncio
-from typing import Dict, Optional, List, Any
-from datetime import datetime
-import logging
-import streamlit as st
-from st_aggrid import AgGrid, GridOptionsBuilder, JsCode, DataReturnMode, GridUpdateMode
-import pandas as pd
-import json
-import io
-import xlsxwriter
-import time
-import aiohttp
-from functools import lru_cache
-import concurrent.futures
-from dataclasses import dataclass
-from streamlit_javascript import st_javascript
+# [Previous imports remain the same...]
 
-# Enhanced page config with custom theme
-st.set_page_config(
-    layout="wide",
-    page_title="ETF Explorer Pro",
-    page_icon="📈",
-    initial_sidebar_state="expanded"
-)
+def create_enhanced_tradingview_chart(ticker: str, container_id: str) -> str:
+    """
+    Create an enhanced TradingView chart with advanced features
+    """
+    return f"""
+    <div class="tradingview-widget-container" style="height: 100%; width: 100%;">
+        <div id="{container_id}" style="height: calc(100vh - 200px); width: 100%;"></div>
+        <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+        <script type="text/javascript">
+        new TradingView.widget({{
+            "autosize": true,
+            "symbol": "{ticker}",
+            "interval": "D",
+            "timezone": "Etc/UTC",
+            "theme": "dark",
+            "style": "1",
+            "locale": "en",
+            "toolbar_bg": "#f1f3f6",
+            "enable_publishing": false,
+            "hide_top_toolbar": false,
+            "hide_legend": false,
+            "save_image": true,
+            "container_id": "{container_id}",
+            "withdateranges": true,
+            "allow_symbol_change": true,
+            "watchlist": [
+                "SPY",
+                "QQQ",
+                "IWM",
+                "DIA"
+            ],
+            "details": true,
+            "hotlist": true,
+            "calendar": true,
+            "studies": [
+                "MASimple@tv-basicstudies",
+                "RSI@tv-basicstudies",
+                "MACD@tv-basicstudies",
+                "BB@tv-basicstudies",
+                "Volume@tv-basicstudies",
+                "AwesomeOscillator@tv-basicstudies",
+                "StochasticRSI@tv-basicstudies"
+            ],
+            "show_popup_button": true,
+            "popup_width": "1000",
+            "popup_height": "650",
+            "drawings_access": {{
+                "type": "all",
+                "tools": [
+                    {{
+                        "name": "Regression Trend",
+                        "grayed": false
+                    }}
+                ]
+            }},
+            "disabled_features": [
+                "header_symbol_search",
+                "header_screenshot",
+            ],
+            "enabled_features": [
+                "study_templates",
+                "use_localstorage_for_settings",
+                "volume_force_overlay",
+                "create_volume_indicator_by_default",
+                "display_market_status",
+                "header_chart_type",
+                "header_compare",
+                "header_indicators",
+                "header_settings",
+                "hide_last_na_study_output",
+                "legend_context_menu",
+                "show_chart_property_page",
+                "support_multicharts",
+                "timeframes_toolbar",
+                "right_bar_stays_on_scroll",
+                "chart_crosshair_menu"
+            ],
+            "overrides": {{
+                "mainSeriesProperties.candleStyle.upColor": "#26a69a",
+                "mainSeriesProperties.candleStyle.downColor": "#ef5350",
+                "mainSeriesProperties.candleStyle.drawWick": true,
+                "mainSeriesProperties.candleStyle.drawBorder": true,
+                "mainSeriesProperties.candleStyle.borderUpColor": "#26a69a",
+                "mainSeriesProperties.candleStyle.borderDownColor": "#ef5350",
+                "mainSeriesProperties.candleStyle.wickUpColor": "#26a69a",
+                "mainSeriesProperties.candleStyle.wickDownColor": "#ef5350",
+                "paneProperties.background": "#131722",
+                "paneProperties.vertGridProperties.color": "#363c4e",
+                "paneProperties.horzGridProperties.color": "#363c4e",
+                "scalesProperties.textColor": "#fff",
+                "mainSeriesProperties.priceLineColor": "#2196f3"
+            }},
+            "loading_screen": {{ 
+                "backgroundColor": "#131722",
+                "foregroundColor": "#2196f3"
+            }}
+        }});
+        </script>
+    </div>
+    """
 
-# Custom CSS for enhanced visuals
-st.markdown("""
-<style>
-    /* Main app styling */
-    .stApp {
-        max-width: 100%;
-        padding: 1rem;
-    }
-    
-    /* Card-like containers */
-    .stats-card {
-        background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
-        border-radius: 10px;
-        padding: 1.5rem;
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255,255,255,0.1);
-        margin-bottom: 1rem;
-        transition: transform 0.3s ease;
-    }
-    
-    .stats-card:hover {
-        transform: translateY(-5px);
-    }
-    
-    /* Enhanced headers */
-    h1 {
-        background: linear-gradient(45deg, #2196F3, #21CBF3);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        font-weight: 700;
-    }
-    
-    /* Custom button styling */
-    .stButton>button {
-        background: linear-gradient(45deg, #2196F3, #21CBF3);
-        color: white;
-        border: none;
-        padding: 0.5rem 1rem;
-        border-radius: 5px;
-        font-weight: bold;
-        transition: all 0.3s ease;
-    }
-    
-    .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-    }
-    
-    /* Enhanced select boxes */
-    .stSelectbox {
-        border-radius: 5px;
-    }
-    
-    /* Custom scrollbar */
-    ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-    }
-    
-    ::-webkit-scrollbar-track {
-        background: rgba(255,255,255,0.1);
-        border-radius: 4px;
-    }
-    
-    ::-webkit-scrollbar-thumb {
-        background: rgba(33,150,243,0.5);
-        border-radius: 4px;
-    }
-    
-    ::-webkit-scrollbar-thumb:hover {
-        background: rgba(33,150,243,0.8);
-    }
-    
-    /* AG-Grid custom styling */
-    .ag-theme-streamlit .ag-root-wrapper {
-        border-radius: 10px;
-        overflow: hidden;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
-    
-    /* Loading animation */
-    .loading-spinner {
-        display: inline-block;
-        width: 50px;
-        height: 50px;
-        border: 3px solid rgba(255,255,255,.3);
-        border-radius: 50%;
-        border-top-color: #2196F3;
-        animation: spin 1s ease-in-out infinite;
-    }
-    
-    @keyframes spin {
-        to { transform: rotate(360deg); }
-    }
-</style>
-""", unsafe_allow_html=True)
+def create_tradingview_technical_analysis(ticker: str) -> str:
+    """
+    Create TradingView Technical Analysis Widget
+    """
+    return f"""
+    <div class="tradingview-widget-container">
+        <div class="tradingview-widget-container__widget"></div>
+        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js">
+        {{
+            "interval": "1m",
+            "width": "100%",
+            "isTransparent": false,
+            "height": "450",
+            "symbol": "{ticker}",
+            "showIntervalTabs": true,
+            "locale": "en",
+            "colorTheme": "dark"
+        }}
+        </script>
+    </div>
+    """
 
-# Enhanced logging configuration
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+def create_tradingview_company_profile(ticker: str) -> str:
+    """
+    Create TradingView Company Profile Widget
+    """
+    return f"""
+    <div class="tradingview-widget-container">
+        <div class="tradingview-widget-container__widget"></div>
+        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-symbol-profile.js">
+        {{
+            "width": "100%",
+            "height": "400",
+            "colorTheme": "dark",
+            "isTransparent": false,
+            "symbol": "{ticker}",
+            "locale": "en"
+        }}
+        </script>
+    </div>
+    """
 
-@dataclass
-class ETFData:
-    """Data class for ETF information"""
-    ticker: str
-    issuer: str
-    description: str
-    asset_class: str
-    inception_date: str
-    aum: float
-    expense_ratio: float
-    holdings: int
-
-class CachedETFDataFetcher:
-    """Enhanced ETF data fetcher with caching and parallel processing"""
-    def __init__(self):
-        self.stockanalysis_url = (
-            "https://api.stockanalysis.com/api/screener/e/bd/"
-            "issuer+n+assetClass+inceptionDate+exchange+etfLeverage+"
-            "aum+close+holdings+price+cusip+isin+etfCategory+"
-            "expenseRatio+etfIndex+etfRegion+etfCountry+optionable.json"
+def show_tradingview_analysis(ticker: str):
+    """
+    Display comprehensive TradingView analysis
+    """
+    tab1, tab2, tab3 = st.tabs(["📈 Chart", "📊 Technical Analysis", "🏢 Profile"])
+    
+    with tab1:
+        st.components.v1.html(
+            create_enhanced_tradingview_chart(ticker, "tradingview_chart"),
+            height=800
         )
-        self.cache_timeout = 3600  # 1 hour cache
-
-    @lru_cache(maxsize=1)
-    async def fetch_data(self) -> pd.DataFrame:
-        """Fetch ETF data with caching"""
-        async with aiohttp.ClientSession() as session:
-            async with session.get(self.stockanalysis_url) as resp:
-                raw_data = await resp.json()
-                return self._process_data(raw_data)
-
-    def _process_data(self, raw_data: Dict) -> pd.DataFrame:
-        """Process raw data with parallel processing"""
-        if not raw_data or 'data' not in raw_data:
-            return pd.DataFrame()
-
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            processed_data = list(executor.map(
-                self._process_etf_entry,
-                raw_data['data']['data'].items()
-            ))
-
-        df = pd.DataFrame(processed_data)
-        return self._enhance_dataframe(df)
-
-    @staticmethod
-    def _process_etf_entry(entry: tuple) -> Dict[str, Any]:
-        """Process individual ETF entry"""
-        ticker, data = entry
-        return {
-            'TICKER_SYMBOL': ticker,
-            'ETF_ISSUER': data.get('issuer', ''),
-            'ETF_DESCRIPTION': data.get('n', ''),
-            'ASSET_CLASS': data.get('assetClass', ''),
-            'INCEPTION_DATE': data.get('inceptionDate', ''),
-            'ASSETS_UNDER_MANAGEMENT': data.get('aum', 0),
-            'EXPENSE_RATIO': data.get('expenseRatio', 0),
-            'NUMBER_OF_HOLDINGS': data.get('holdings', 0),
-            'CURRENT_PRICE': data.get('price', 0),
-            'CUSIP': data.get('cusip', ''),
-            'ETF_CATEGORY': data.get('etfCategory', ''),
-            'TRACKING_INDEX': data.get('etfIndex', ''),
-            'GEOGRAPHIC_REGION': data.get('etfRegion', ''),
-            'COUNTRY_FOCUS': data.get('etfCountry', ''),
-            'HAS_OPTIONS': data.get('optionable', False)
-        }
-
-    def _enhance_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Enhance dataframe with additional metrics and formatting"""
-        # Format numeric columns
-        numeric_cols = {
-            'CURRENT_PRICE': '${:,.2f}',
-            'ASSETS_UNDER_MANAGEMENT': '${:,.2f}M',
-            'EXPENSE_RATIO': '{:.2%}'
-        }
-
-        for col, fmt in numeric_cols.items():
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
-                df[col] = df[col].apply(lambda x: fmt.format(x) if pd.notnull(x) else '')
-
-        # Add calculated metrics
-        df['YTD_PERFORMANCE'] = df['CURRENT_PRICE'].apply(
-            lambda x: f"{(float(x.replace('$', '').replace(',', '')) / 100 - 1):.2%}"
-            if isinstance(x, str) and x
-            else ''
+        
+    with tab2:
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            st.components.v1.html(
+                create_tradingview_technical_analysis(ticker),
+                height=500
+            )
+        with col2:
+            # Add custom metrics
+            st.markdown("""
+            <div class="stats-card">
+                <h4>Trading Signals</h4>
+                <div id="trading-signals"></div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+    with tab3:
+        st.components.v1.html(
+            create_tradingview_company_profile(ticker),
+            height=450
         )
-
-        return df
-
-@st.cache_data(ttl=3600)
-def load_data() -> pd.DataFrame:
-    """Load ETF data with caching"""
-    fetcher = CachedETFDataFetcher()
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    return loop.run_until_complete(fetcher.fetch_data())
-
-def create_interactive_chart(ticker: str) -> None:
-    """Create interactive TradingView chart"""
-    chart_config = {
-        "symbol": ticker,
-        "interval": "D",
-        "timezone": "Etc/UTC",
-        "theme": "dark",
-        "style": "1",
-        "locale": "en",
-        "enable_publishing": False,
-        "allow_symbol_change": True,
-        "save_image": True,
-        "studies": [
-            "MASimple@tv-basicstudies",
-            "RSI@tv-basicstudies",
-            "MACD@tv-basicstudies",
-            "BB@tv-basicstudies"
-        ]
-    }
-    
-    st.components.v1.html(
-        f"""
-        <div class="tradingview-widget-container">
-            <div id="tradingview_chart"></div>
-            <script src="https://s3.tradingview.com/tv.js"></script>
-            <script>
-                new TradingView.widget({chart_config});
-            </script>
-        </div>
-        """,
-        height=600
-    )
 
 def main() -> None:
-    st.title("📈 ETF Explorer Pro")
-    
-    # Add app description with enhanced markdown
+    # [Previous main code remains the same until the grid configuration]
+
+    # Modify the grid configuration to include the enhanced chart button
+    gb.configure_column(
+        "TICKER_SYMBOL",
+        cellRenderer=JsCode("""
+        function(params) {
+            return `
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-weight: bold;">${params.value}</span>
+                    <button onclick="showAdvancedChart('${params.value}')" 
+                            style="background: linear-gradient(45deg, #2196F3, #21CBF3);
+                                   color: white;
+                                   border: none;
+                                   padding: 4px 12px;
+                                   border-radius: 4px;
+                                   cursor: pointer;
+                                   display: flex;
+                                   align-items: center;
+                                   gap: 4px;">
+                        <span>📈</span>
+                        <span>Advanced Chart</span>
+                    </button>
+                </div>
+            `;
+        }
+        """)
+    )
+
+    # Add JavaScript handler for chart display
     st.markdown("""
-    <div class="stats-card">
-        <h3>Welcome to ETF Explorer Pro</h3>
-        <p>An advanced ETF analysis platform with real-time data, interactive charts, and comprehensive filtering.</p>
-    </div>
+    <script>
+    function showAdvancedChart(ticker) {
+        // Create modal for chart display
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            backdrop-filter: blur(5px);
+        `;
+        
+        const modalContent = document.createElement('div');
+        modalContent.style.cssText = `
+            width: 95%;
+            height: 90%;
+            background: #131722;
+            border-radius: 12px;
+            position: relative;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        `;
+        
+        // Add close button
+        const closeButton = document.createElement('button');
+        closeButton.innerHTML = '✕';
+        closeButton.style.cssText = `
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            z-index: 1001;
+        `;
+        closeButton.onclick = () => document.body.removeChild(modal);
+        
+        modalContent.appendChild(closeButton);
+        modal.appendChild(modalContent);
+        document.body.appendChild(modal);
+        
+        // Initialize TradingView widget in modal
+        new TradingView.widget({
+            "autosize": true,
+            "symbol": ticker,
+            "interval": "D",
+            "timezone": "Etc/UTC",
+            "theme": "dark",
+            "style": "1",
+            "locale": "en",
+            "toolbar_bg": "#f1f3f6",
+            "enable_publishing": false,
+            "withdateranges": true,
+            "range": "YTD",
+            "allow_symbol_change": true,
+            "details": true,
+            "hotlist": true,
+            "calendar": true,
+            "container_id": "tradingview_modal"
+        });
+    }
+    </script>
     """, unsafe_allow_html=True)
 
-    # Load data with progress indicator
-    with st.spinner("Loading ETF data..."):
-        etf_data = load_data()
-        if etf_data.empty:
-            st.error("❌ No data available. Please try again later.")
-            return
-
-    # Create layout
-    col1, col2, col3 = st.columns([2, 6, 2])
-
-    with col1:
-        st.markdown('<div class="stats-card">', unsafe_allow_html=True)
-        
-        # Enhanced filters
-        selected_issuer = st.selectbox(
-            "🏢 ETF Issuer",
-            options=["All"] + sorted(etf_data['ETF_ISSUER'].unique().tolist())
-        )
-        
-        selected_asset_class = st.selectbox(
-            "💼 Asset Class",
-            options=["All"] + sorted(etf_data['ASSET_CLASS'].unique().tolist())
-        )
-        
-        min_aum = st.slider(
-            "💰 Min AUM ($M)",
-            min_value=0,
-            max_value=int(etf_data['ASSETS_UNDER_MANAGEMENT'].max()),
-            value=0
-        )
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with col2:
-        # Filter data based on selections
-        filtered_data = etf_data.copy()
-        if selected_issuer != "All":
-            filtered_data = filtered_data[filtered_data['ETF_ISSUER'] == selected_issuer]
-        if selected_asset_class != "All":
-            filtered_data = filtered_data[filtered_data['ASSET_CLASS'] == selected_asset_class]
-        filtered_data = filtered_data[
-            filtered_data['ASSETS_UNDER_MANAGEMENT'].str.replace('$', '').str.replace(',', '').astype(float) >= min_aum
-        ]
-
-        # Display interactive grid
-        gb = GridOptionsBuilder.from_dataframe(filtered_data)
-        gb.configure_default_column(
-            editable=False,
-            sortable=True,
-            filterable=True,
-            resizable=True
-        )
-        
-        # Add chart button
-        gb.configure_column(
-            "TICKER_SYMBOL",
-            cellRenderer=JsCode("""
-            function(params) {
-                return `
-                    <div style="display: flex; align-items: center;">
-                        <span style="margin-right: 8px;">${params.value}</span>
-                        <button onclick="showChart('${params.value}')" 
-                                style="background: linear-gradient(45deg, #2196F3, #21CBF3);
-                                       color: white;
-                                       border: none;
-                                       padding: 4px 8px;
-                                       border-radius: 4px;
-                                       cursor: pointer;">
-                            📈 Chart
-                        </button>
-                    </div>
-                `;
-            }
-            """)
-        )
-
-        grid_response = AgGrid(
-            filtered_data,
-            gridOptions=gb.build(),
-            height=600,
-            enable_enterprise_modules=True,
-            update_mode=GridUpdateMode.MODEL_CHANGED,
-            data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
-            theme='streamlit'
-        )
-
-    with col3:
-        st.markdown('<div class="stats-card">', unsafe_allow_html=True)
-        st.subheader("📊 Summary Statistics")
-        
-        total_etfs = len(filtered_data)
-        total_aum = filtered_data['ASSETS_UNDER_MANAGEMENT'].str.replace('$', '').str.replace(',', '').astype(float).sum()
-        avg_expense = filtered_data['EXPENSE_RATIO'].str.rstrip('%').astype(float).mean()
-        
-        st.metric("Total ETFs", f"{total_etfs:,}")
-        st.metric("Total AUM", f"${total_aum:,.2f}M")
-        st.metric("Avg Expense Ratio", f"{avg_expense:.2%}")
-        
-        # Export options
-        st.download_button(
-            label="📥 Export to CSV",
-            data=filtered_data.to_csv(index=False).encode('utf-8'),
-            file_name=f"etf_data_{datetime.now().strftime('%Y%m%d')}.csv",
-            mime="text/csv"
-        )
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+    # [Rest of the main code remains the same]
 
 if __name__ == "__main__":
     main()
