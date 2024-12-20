@@ -542,6 +542,21 @@ def main() -> None:
         # Trigger modal for export options
         if st.button("Export Data"):
             export_dialog(pd.DataFrame(response['data']))
+        export_buttons = """
+        <script>
+            function exportToExcel() {
+                const gridOptions = window.streamlitAgGrid.gridOptions;
+                gridOptions.api.exportDataAsExcel();
+            }
+            function exportToCsv() {
+                const gridOptions = window.streamlitAgGrid.gridOptions;
+                gridOptions.api.exportDataAsCsv();
+            }
+        </script>
+        <button onclick="exportToExcel()">Export to Excel</button>
+        <button onclick="exportToCsv()">Export to CSV</button>
+        """
+        st.components.v1.html(export_buttons, height=50)
 
 if __name__ == "__main__":
     main()
