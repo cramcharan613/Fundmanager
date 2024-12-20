@@ -112,7 +112,25 @@ class ETFDataFetcher:
         df = pd.DataFrame({"symbol": symbols})
         df["Actively Managed"] = "YES"
         return df
-
+        
+    def preprocess_numeric_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        numeric_columns = [
+            'CURRENT_PRICE', 'CLOSING_PRICE',
+            'ASSETS_UNDER_MANAGEMENT', 'EXPENSE_RATIO'
+        ]
+        for col in numeric_columns:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+                if col in ['CURRENT_PRICE', 'CLOSING_PRICE', 'ASSETS_UNDER_MANAGEMENT']:
+                    df[col] = df[col].apply(
+                        lambda x: f"${x:,.2f}" if pd.notnull(x) else ''
+                    )
+                elif col == 'EXPENSE_RATIO':
+                    df[col] = df[col].apply(
+                        lambda x: f"{x:.2%}" if pd.notnull(x) else ''
+                    )
+        return df
+        
     async def fetch_stockanalysis_data(self) -> pd.DataFrame:
         """Fetch ETF data from Stock Analysis API."""
         headers = {
