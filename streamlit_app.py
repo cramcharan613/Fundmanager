@@ -454,7 +454,7 @@ def show_tradingview_analysis(ticker: str):
     with tab3:
         st.components.v1.html(create_tradingview_company_profile(ticker), height=450)
 
-def main() -> None:
+
 def main() -> None:
     st.title("📈 ETF Explorer Pro")
     st.markdown("Explore ETFs with infinite scrolling, custom CSS, JS interactivity, filtering, exporting, and TradingView integration.")
