@@ -519,7 +519,7 @@ def main() -> None:
     filtered_data = filtered_data[numeric_filtered_aum >= min_aum]
 
     with col2:
-         final_grid_options, custom_css = configure_grid(filtered_data, group_by_column=None)
+        final_grid_options, custom_css = configure_grid(filtered_data, group_by_column=None)
         
         col3, col4 = st.columns([1, 9])
         with col3:
