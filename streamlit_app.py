@@ -415,7 +415,6 @@ def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> D
         
         # Selection features
         enableRangeSelection=True,
-        enableRangeHandle=True,
         suppressRowClickSelection=False,
         
         # Grouping features
