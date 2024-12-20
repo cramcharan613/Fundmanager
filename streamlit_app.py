@@ -2,27 +2,17 @@ import asyncio
 from typing import Dict, Optional
 from datetime import datetime
 import logging
-
-import streamlit as st
-from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
-import pandas as pd
-import json
-import openpyxl
-import io
-import xlsxwriter
 import os
 import time
 import re
+import json
 import aiohttp
-from playwright.async_api import async_playwright
-from bs4 import BeautifulSoup
+import pandas as pd
+import streamlit as st
+from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
+from dotenv import load_dotenv
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
+load_dotenv()
 
 st.set_page_config(
     layout="wide",
@@ -31,14 +21,11 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-@st.cache_data()
-def ensure_playwright_setup() -> bool:
-    if not os.path.exists('/usr/bin/google-chrome'):
-        os.system('playwright install-deps')
-    os.system('playwright install')
-    return True
-
-ensure_playwright_setup()
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 class ETFDataFetcher:
     def __init__(self):
@@ -48,239 +35,132 @@ class ETFDataFetcher:
             "aum+close+holdings+price+cusip+isin+etfCategory+"
             "expenseRatio+etfIndex+etfRegion+etfCountry+optionable.json"
         )
-        self.etfdb_base_url = "https://etfdb.com"
-        # Base page for actively managed ETFs
-        self.actively_managed_url = (
-            "https://etfdb.com/themes/actively-managed-etfs/"
-            "#complete-list&sort_name=assets_under_management&sort_order=desc&page={page}"
-        )
 
-    async def get_dynamic_headers(self, url: str) -> Dict:
-        try:
-            async with async_playwright() as p:
-                browser = await p.chromium.launch(
-                    headless=True,
-                    args=['--no-sandbox', '--disable-setuid-sandbox']
+        self.etfdb_base_url = "https://etfdb.com/data_set/"
+        self.etfdb_headers = {
+            "accept": "application/json, text/javascript, */*; q=0.01",
+            "accept-language": "en-US,en;q=0.9",
+            "content-type": "application/json",
+            "if-none-match": "W/\"a641d3a77644a64b026420fdc4ee53ce\"",
+            "priority": "u=1, i",
+            "sec-ch-ua": "\"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"Windows\"",
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "same-origin",
+            "x-requested-with": "XMLHttpRequest",
+            # "cookie": "...", # Usually not needed unless the site requires it
+            "Referer": "https://etfdb.com/themes/actively-managed-etfs/",
+            "Referrer-Policy": "strict-origin-when-cross-origin"
+        }
+
+    async def fetch_etfdb_data(self, max_pages=10, limit=25) -> pd.DataFrame:
+        """Fetch actively managed ETFs from ETFDB via JSON endpoint with pagination."""
+        # The endpoint uses offset-based pagination. 
+        # offset increments by `limit` to get next sets of results.
+        all_data = []
+        async with aiohttp.ClientSession() as session:
+            for page_num in range(1, max_pages + 1):
+                offset = (page_num - 1) * limit
+                url = (
+                    f"{self.etfdb_base_url}"
+                    f"?tm=80499&cond=&no_null_sort=&count_by_id=&limit={limit}"
+                    f"&sort=assets_under_management&order=desc&limit={limit}&offset={offset}"
                 )
-                context = await browser.new_context(
-                    viewport={'width': 1920, 'height': 1080},
-                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-                               '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    locale='en-US'
-                )
-                page = await context.new_page()
-                headers = {}
-
-                async def handle_response(response):
-                    if response.url == url:
-                        h = await response.all_headers()
-                        for k, v in h.items():
-                            if v is not None and v != '':
-                                headers[k] = v
-                        headers.update({
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                                          'AppleWebKit/537.36 (KHTML, like Gecko) '
-                                          'Chrome/120.0.0.0 Safari/537.36',
-                            'Accept': 'application/json,text/html,application/xhtml+xml,'
-                                      'application/xml;q=0.9,image/webp,*/*;q=0.8',
-                            'Accept-Language': 'en-US,en;q=0.5',
-                            'Accept-Encoding': 'gzip, deflate, br',
-                            'Connection': 'keep-alive',
-                            'Upgrade-Insecure-Requests': '1',
-                            'Sec-Fetch-Dest': 'document',
-                            'Sec-Fetch-Mode': 'navigate',
-                            'Sec-Fetch-Site': 'none',
-                            'Sec-Fetch-User': '?1',
-                            'Cache-Control': 'max-age=0'
-                        })
-
-                page.on('response', handle_response)
+                logger.info(f"Fetching ETFDB page {page_num} with offset {offset}: {url}")
                 try:
-                    await page.goto(url, wait_until='networkidle', timeout=30000)
-                    await page.wait_for_load_state('domcontentloaded')
-                    await page.wait_for_load_state('networkidle')
-                    await page.wait_for_timeout(2000)
-                except:
-                    pass
-                await context.close()
-                await browser.close()
-                if not headers:
-                    return {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                                      'AppleWebKit/537.36 (KHTML, like Gecko) '
-                                      'Chrome/120.0.0.0 Safari/537.36',
-                        'Accept': 'application/json,text/html,application/xhtml+xml,'
-                                  'application/xml;q=0.9,image/webp,*/*;q=0.8',
-                        'Accept-Language': 'en-US,en;q=0.5'
-                    }
-                return headers
-        except:
-            return {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                              'AppleWebKit/537.36 (KHTML, like Gecko) '
-                              'Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'application/json,text/html,application/xhtml+xml,'
-                          'application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5'
-            }
-
-    def preprocess_numeric_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        numeric_columns = [
-            'CURRENT_PRICE', 'CLOSING_PRICE',
-            'ASSETS_UNDER_MANAGEMENT', 'EXPENSE_RATIO'
-        ]
-        for col in numeric_columns:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
-                if col in ['CURRENT_PRICE', 'CLOSING_PRICE', 'ASSETS_UNDER_MANAGEMENT']:
-                    df[col] = df[col].apply(
-                        lambda x: f"${x:,.2f}" if pd.notnull(x) else ''
-                    )
-                elif col == 'EXPENSE_RATIO':
-                    df[col] = df[col].apply(
-                        lambda x: f"{x:.2%}" if pd.notnull(x) else ''
-                    )
-        return df
-
-    async def fetch_actively_managed_etfs(self, max_pages=10) -> pd.DataFrame:
-        """Scrape actively managed ETFs from ETFDB by parsing the HTML pages."""
-        all_tickers = []
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                args=['--no-sandbox', '--disable-setuid-sandbox']
-            )
-            context = await browser.new_context(
-                viewport={'width': 1920, 'height': 1080},
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                           'AppleWebKit/537.36 (KHTML, like Gecko) '
-                           'Chrome/120.0.0.0 Safari/537.36',
-                locale='en-US'
-            )
-            page = await context.new_page()
-
-            # Iterate through pages
-            for page_num in range(1, max_pages+1):
-                url = self.actively_managed_url.format(page=page_num)
-                try:
-                    await page.goto(url, wait_until='networkidle', timeout=30000)
-                    await page.wait_for_load_state('domcontentloaded')
-
-                    html = await page.content()
-                    soup = BeautifulSoup(html, 'html.parser')
-
-                    # Adjust the selector below based on the actual HTML structure
-                    # Assuming tickers appear in a table with class "table" and ticker in a <a> or <td>
-                    table = soup.find('table', class_='table')
-                    if not table:
-                        logger.info(f"No table found on page {page_num}, stopping.")
-                        break
-
-                    rows = table.find_all('tr')
-                    # Assuming first row might be headers
-                    for row in rows[1:]:
-                        cols = row.find_all('td')
-                        if not cols:
-                            continue
-                        # Adjust based on actual column structure
-                        # Assume first column or a specific column has ticker
-                        ticker_col = cols[0].find('a')
-                        if ticker_col:
-                            ticker = ticker_col.text.strip().upper()
-                            if ticker:
-                                all_tickers.append(ticker)
-                    # Add a small delay to avoid overwhelming server
-                    await asyncio.sleep(1)
+                    async with session.get(url, headers=self.etfdb_headers) as resp:
+                        resp.raise_for_status()
+                        text = await resp.text()
+                        data = json.loads(text)
+                        if "data" not in data or not data["data"]:
+                            logger.info("No more data found, stopping.")
+                            break
+                        all_data.extend(data["data"])
+                        # Wait a bit to avoid overwhelming the server
+                        await asyncio.sleep(1)
                 except Exception as e:
-                    logger.error(f"Error fetching active ETF page {page_num}: {str(e)}")
+                    logger.error(f"Error fetching ETFDB data at offset {offset}: {str(e)}")
                     continue
 
-            await context.close()
-            await browser.close()
-
-        if not all_tickers:
+        if not all_data:
             return pd.DataFrame(columns=["symbol", "Actively Managed"])
 
-        # Remove duplicates
-        all_tickers = list(set(all_tickers))
+        # Extract ticker symbols from data. 
+        # Check the structure of `data`. Usually `data` might contain objects with a "symbol" field.
+        # Adjust the key below as needed based on actual JSON structure.
+        # Example: If each item in data["data"] is something like {"symbol": "XXX", ...}
+        # then we can just extract symbol directly.
+        # If not, inspect the structure and adjust accordingly.
+        
+        symbols = []
+        for item in all_data:
+            # Attempt to find symbol in item. 
+            # This might differ based on the actual structure. Adjust as needed.
+            # For example, if "symbol" is directly in item:
+            if "symbol" in item:
+                symbols.append(item["symbol"].upper())
+            else:
+                # If symbol is not directly present, try to find a field that has it.
+                # This is placeholder logic - you need to look at the JSON structure returned by the endpoint
+                # and extract the symbol appropriately.
+                pass
 
-        # Create dataframe
-        df = pd.DataFrame({"symbol": all_tickers})
+        # Remove duplicates
+        symbols = list(set(symbols))
+        df = pd.DataFrame({"symbol": symbols})
         df["Actively Managed"] = "YES"
         return df
 
     async def fetch_stockanalysis_data(self) -> pd.DataFrame:
-        """Fetch stock analysis ETF data."""
-        try:
-            headers = await self.get_dynamic_headers(self.stockanalysis_url)
-            # Make a request using Playwright in a similar way as before
-            # We'll use a direct fetch scenario
-            response_data = await self.playwright_fetch_json(self.stockanalysis_url, headers)
-            if response_data and 'data' in response_data:
-                raw = response_data.get("data")
-                df = (
-                    pd.DataFrame()
-                    .from_dict(raw.get("data", {}))
-                    .T.reset_index()
-                    .rename(columns=str.upper)
-                    .rename(
-                        columns={
-                            "INDEX": "TICKER_SYMBOL",
-                            "ISSUER": "ETF_ISSUER",
-                            "N": "ETF_DESCRIPTION",
-                            "ASSETCLASS": "ASSET_CLASS",
-                            "INCEPTIONDATE": "INCEPTION_DATE",
-                            "EXCHANGE": "LISTED_EXCHANGE",
-                            "ETFLEVERAGE": "LEVERAGE",
-                            "AUM": "ASSETS_UNDER_MANAGEMENT",
-                            "CLOSE": "CLOSING_PRICE",
-                            "HOLDINGS": "NUMBER_OF_HOLDINGS",
-                            "PRICE": "CURRENT_PRICE",
-                            "ETFCATEGORY": "ETF_CATEGORY",
-                            "EXPENSERATIO": "EXPENSE_RATIO",
-                            "ETFINDEX": "TRACKING_INDEX",
-                            "ETFREGION": "GEOGRAPHIC_REGION",
-                            "ETFCOUNTRY": "COUNTRY_FOCUS",
-                            "OPTIONABLE": "HAS_OPTIONS",
-                        }
-                    )
+        """Fetch ETF data from Stock Analysis API."""
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json,text/html,application/xhtml+xml,application/xml;"
+                      "q=0.9,image/webp,*/*;q=0.8"
+        }
+        # Fetch JSON using aiohttp
+        async with aiohttp.ClientSession() as session:
+            async with session.get(self.stockanalysis_url, headers=headers) as resp:
+                resp.raise_for_status()
+                raw_data = await resp.json()
+
+        if raw_data and 'data' in raw_data:
+            raw = raw_data.get("data")
+            df = (
+                pd.DataFrame()
+                .from_dict(raw.get("data", {}))
+                .T.reset_index()
+                .rename(columns=str.upper)
+                .rename(
+                    columns={
+                        "INDEX": "TICKER_SYMBOL",
+                        "ISSUER": "ETF_ISSUER",
+                        "N": "ETF_DESCRIPTION",
+                        "ASSETCLASS": "ASSET_CLASS",
+                        "INCEPTIONDATE": "INCEPTION_DATE",
+                        "EXCHANGE": "LISTED_EXCHANGE",
+                        "ETFLEVERAGE": "LEVERAGE",
+                        "AUM": "ASSETS_UNDER_MANAGEMENT",
+                        "CLOSE": "CLOSING_PRICE",
+                        "HOLDINGS": "NUMBER_OF_HOLDINGS",
+                        "PRICE": "CURRENT_PRICE",
+                        "ETFCATEGORY": "ETF_CATEGORY",
+                        "EXPENSERATIO": "EXPENSE_RATIO",
+                        "ETFINDEX": "TRACKING_INDEX",
+                        "ETFREGION": "GEOGRAPHIC_REGION",
+                        "ETFCOUNTRY": "COUNTRY_FOCUS",
+                        "OPTIONABLE": "HAS_OPTIONS",
+                    }
                 )
-                return self.preprocess_numeric_data(df)
+            )
+            return self.preprocess_numeric_data(df)
+        else:
             logger.error("Failed to fetch or process Stock Analysis data")
             return pd.DataFrame()
-        except:
-            return pd.DataFrame()
-
-    async def playwright_fetch_json(self, url: str, headers: Dict) -> Optional[dict]:
-        """Utility method to fetch JSON using Playwright's page.evaluate."""
-        async with async_playwright() as p:
-            try:
-                browser = await p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-setuid-sandbox'])
-                context = await browser.new_context(
-                    viewport={'width': 1920, 'height': 1080},
-                    user_agent=headers.get('User-Agent', ''),
-                    locale='en-US'
-                )
-                page = await context.new_page()
-                base_url_match = re.match(r"(https://[^/]+)", url)
-                base_url = base_url_match.group(1) if base_url_match else "https://etfdb.com"
-                await page.goto(base_url, wait_until='networkidle', timeout=30000)
-                response_data = await page.evaluate(f'''
-                    fetch("{url}", {{
-                        method: "GET",
-                        headers: {json.dumps(headers)}
-                    }}).then(res => res.text())
-                ''')
-                await context.close()
-                await browser.close()
-                if response_data:
-                    try:
-                        return json.loads(response_data)
-                    except json.JSONDecodeError:
-                        return None
-            except Exception as e:
-                logger.error(f"Fetch JSON error: {str(e)}")
-                return None
 
     def merge_data(self, stockanalysis_df: pd.DataFrame, etfdb_df: pd.DataFrame) -> pd.DataFrame:
         merged_df = pd.merge(
@@ -310,15 +190,13 @@ class ETFDataFetcher:
         return merged_df
 
     async def fetch_and_combine_data(self) -> pd.DataFrame:
-        # Fetch ETFDB active data first
-        etfdb_df = await self.fetch_actively_managed_etfs(max_pages=10)
-        # Then fetch stock analysis data
+        etfdb_df = await self.fetch_etfdb_data(max_pages=10, limit=25)
         stockanalysis_df = await self.fetch_stockanalysis_data()
         return self.merge_data(stockanalysis_df, etfdb_df)
 
 
 @st.cache_data()
-def load_data_sync() -> pd.DataFrame:
+def load_data() -> pd.DataFrame:
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     fetcher = ETFDataFetcher()
@@ -635,7 +513,7 @@ def display_summary_stats(df: pd.DataFrame) -> None:
         st.error(f"Failed to calculate and display summary stats: {str(e)}")
         logger.error(f"Summary stats error: {str(e)}")
 
-def export_data(df: pd.DataFrame, format: str = 'csv') -> tuple[bytes, str, str]:
+def export_data(df: pd.DataFrame, format: str = 'csv') -> tuple[Optional[bytes], Optional[str], Optional[str]]:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     try:
         if format.lower() == 'csv':
@@ -690,22 +568,17 @@ def display_export_section(df: pd.DataFrame) -> None:
                 )
 
 def main() -> None:
-   
-    st.title("📈 ETF Explorer Pro")
-    st.markdown("""
-    Comprehensive ETF analysis platform with advanced filtering, visualization,
-    and real-time data.
-    """)
     try:
         with st.spinner("Loading ETF data..."):
             start_time = time.time()
-            etf_data = load_data_sync()
+            etf_data = load_data()
             load_time = time.time() - start_time
             st.success(f"Data loaded successfully in {load_time:.2f} seconds")
     except Exception as e:
         st.error(f"Failed to load ETF data: {str(e)}")
         logger.error(f"Data loading error: {str(e)}")
         return
+
     if etf_data is not None and not etf_data.empty:
         st.subheader("Filters")
         col1, col2 = st.columns(2)
