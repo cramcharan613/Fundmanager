@@ -258,12 +258,13 @@ def main():
         )
 
         selected_rows = response['selected_rows']
-        if selected_rows:
+
+# If selected_rows is a list of dictionaries (standard behavior from AgGrid):
+        if selected_rows and len(selected_rows) > 0:
             st.subheader("Selected Rows Details")
-            # Convert selected rows to ETF objects and display
             etf_objects = [ETF(row) for row in selected_rows]
             for etf_obj in etf_objects:
-                st.write(etf_obj)  # This will use _repr_html_ of the ETF class
+                st.write(etf_obj)
 
 if __name__ == "__main__":
     main()
