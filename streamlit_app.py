@@ -455,6 +455,7 @@ def show_tradingview_analysis(ticker: str):
         st.components.v1.html(create_tradingview_company_profile(ticker), height=450)
 
 def main() -> None:
+def main() -> None:
     st.title("📈 ETF Explorer Pro")
     st.markdown("Explore ETFs with infinite scrolling, custom CSS, JS interactivity, filtering, exporting, and TradingView integration.")
 
@@ -464,7 +465,7 @@ def main() -> None:
         st.error("No data available.")
         return
 
-    col1, col2 = st.columns([1,9])
+    col1, col2 = st.columns([1, 9])
 
     with col1:
         issuers = sorted(etf_data['ETF_ISSUER'].dropna().unique().tolist())
@@ -473,48 +474,10 @@ def main() -> None:
         asset_classes = sorted(etf_data['ASSET_CLASS'].dropna().unique().tolist())
         selected_asset_class = st.selectbox("Filter by Asset Class", ["All"] + asset_classes, index=0)
 
-        numeric_aum = etf_data['ASSETS_UNDER_MANAGEMENT'].str.replace('$', '', regex=False).str.replace(',', '', regex=False).str.replace('M','')
+        numeric_aum = etf_data['ASSETS_UNDER_MANAGEMENT'].str.replace('$', '', regex=False).str.replace(',', '', regex=False).str.replace('M', '')
         numeric_aum = pd.to_numeric(numeric_aum, errors='coerce')
         max_aum = int(numeric_aum.max()) if numeric_aum.notnull().any() else 0
         min_aum = st.slider("Min AUM ($M)", min_value=0, max_value=max_aum, value=0)
-
-        export_format = st.selectbox("Export Format", ["CSV", "Excel"], key="export_format")
-        if export_format:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            if export_format.lower() == 'csv':
-                buffer = io.BytesIO()
-                etf_data.to_csv(buffer, index=False, encoding='utf-8')
-                buffer.seek(0)
-                bytes_data = buffer.getvalue()
-                filename = f"etf_data_{timestamp}.csv"
-                mime_type = "text/csv"
-            else:
-                buffer = io.BytesIO()
-                with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                    etf_data.to_excel(writer, index=False, sheet_name='ETF_Data')
-                buffer.seek(0)
-                bytes_data = buffer.getvalue()
-                filename = f"etf_data_{timestamp}.xlsx"
-                mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-
-            st.download_button(label=f"Download {export_format}", data=bytes_data, file_name=filename, mime=mime_type)
-
-        # Client-side toggle grouping
-        toggle_group_button = st.button("Toggle Group by Issuer")
-        if toggle_group_button:
-            st.components.v1.html("""
-            <script>
-            setTimeout(() => {
-                const gridOptions = window.streamlitAgGrid?.gridOptions;
-                if (gridOptions) {
-                    const issuerCol = gridOptions.columnApi.getColumn('ETF_ISSUER');
-                    const colDef = issuerCol.getColDef();
-                    colDef.rowGroup = !colDef.rowGroup;
-                    gridOptions.api.setColumnDefs(gridOptions.columnDefs);
-                }
-            }, 500);
-            </script>
-            """, height=0, width=0)
 
     filtered_data = etf_data.copy()
     if selected_issuer != "All":
@@ -522,7 +485,7 @@ def main() -> None:
     if selected_asset_class != "All":
         filtered_data = filtered_data[filtered_data['ASSET_CLASS'] == selected_asset_class]
 
-    numeric_filtered_aum = filtered_data['ASSETS_UNDER_MANAGEMENT'].str.replace('$','',regex=False).str.replace(',','',regex=False).str.replace('M','')
+    numeric_filtered_aum = filtered_data['ASSETS_UNDER_MANAGEMENT'].str.replace('$', '', regex=False).str.replace(',', '', regex=False).str.replace('M', '')
     numeric_filtered_aum = pd.to_numeric(numeric_filtered_aum, errors='coerce')
     filtered_data = filtered_data[numeric_filtered_aum >= min_aum]
 
@@ -547,46 +510,40 @@ def main() -> None:
             reload_data=True
         )
 
-        selected_rows = response['selected_rows']
+        # Trigger modal for export options
+        if st.button("Export Data"):
+            st.session_state.show_modal = True
 
-        highlight_button = st.button("Highlight Selected Rows")
-        if highlight_button and isinstance(selected_rows, list) and len(selected_rows) > 0:
-            tickers_to_highlight = [row['TICKER_SYMBOL'] for row in selected_rows if isinstance(row, dict) and 'TICKER_SYMBOL' in row]
-            if tickers_to_highlight:
-                st.components.v1.html(
-                    f"""
-                    <script>
-                    setTimeout(() => {{
-                        const tickers = {tickers_to_highlight};
-                        const rows = document.querySelectorAll('.ag-center-cols-container .ag-row');
-                        rows.forEach(row => {{
-                            const tickerCell = row.querySelector("[col-id='TICKER_SYMBOL'] .ag-cell-value");
-                            if (tickerCell && tickers.includes(tickerCell.innerText)) {{
-                                row.classList.add('highlighted-row');
-                            }}
-                        }});
-                    }}, 1000);
-                    </script>
-                    """,
-                    height=0,
-                    width=0
-                )
+        if st.session_state.get("show_modal", False):
+            with st.modal("Export Options"):
+                st.markdown("### Select Export Format")
+                export_format = st.radio("Choose file type", ["CSV", "Excel"])
+                confirm_export = st.button("Confirm Export")
 
-        if isinstance(selected_rows, list) and len(selected_rows) > 0:
-            st.subheader("Selected Rows Details")
-            etf_objects = [ETF(row) for row in selected_rows if isinstance(row, dict)]
-            for etf_obj in etf_objects:
-                st.write(etf_obj)
-
-            first_ticker = None
-            for row in selected_rows:
-                if isinstance(row, dict) and 'TICKER_SYMBOL' in row:
-                    first_ticker = row['TICKER_SYMBOL']
-                    break
-
-            if first_ticker:
-                st.subheader(f"TradingView Analysis for {first_ticker}")
-                show_tradingview_analysis(first_ticker)
+                if confirm_export:
+                    if export_format == "CSV":
+                        # Export as CSV
+                        st.download_button(
+                            label="Download CSV",
+                            data=response['data'].to_csv(index=False).encode('utf-8'),
+                            file_name="exported_data.csv",
+                            mime="text/csv"
+                        )
+                    elif export_format == "Excel":
+                        # Export as Excel
+                        output = io.BytesIO()
+                        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                            pd.DataFrame(response['data']).to_excel(writer, index=False, sheet_name='Sheet1')
+                        output.seek(0)
+                        st.download_button(
+                            label="Download Excel",
+                            data=output,
+                            file_name="exported_data.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+                    st.session_state.show_modal = False
 
 if __name__ == "__main__":
     main()
+
+    
