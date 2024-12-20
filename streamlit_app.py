@@ -3,7 +3,7 @@ from typing import Dict, Optional
 from datetime import datetime
 import logging
 import streamlit as st
-from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
+from st_aggrid import AgGrid, GridOptionsBuilder, JsCode, DataReturnMode, GridUpdateMode
 import pandas as pd
 import json
 import io
@@ -11,7 +11,6 @@ import xlsxwriter
 import time
 import aiohttp
 
-# Set page config before any Streamlit commands
 st.set_page_config(
     layout="wide",
     page_title="ETF Explorer Pro",
@@ -19,7 +18,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Add custom CSS to enhance customization
+# Add custom CSS for styling
 st.markdown("""
 <style>
 body {
@@ -129,7 +128,6 @@ def get_grid_options() -> Dict:
         'suppressRowClickSelection': False,
         'enableSorting': True,
         'enableFilter': True,
-        'groupSelectsChildren': True,
         'enableColResize': True,
         'rowSelection': 'multiple',
         'enableStatusBar': True,
@@ -147,23 +145,6 @@ def get_grid_options() -> Dict:
         'enableCsvExport': True,
         'enableExcelExport': True,
         'enablePivotMode': True,
-        'suppressAggFuncInHeader': False,
-        'suppressColumnVirtualisation': False,
-        'suppressRowVirtualisation': False,
-        'suppressMenuHide': False,
-        'suppressMovableColumns': False,
-        'suppressFieldDotNotation': True,
-        'suppressCopyRowsToClipboard': False,
-        'suppressCopySingleCellRanges': False,
-        'suppressMultiRangeSelection': False,
-        'suppressParentsInRowNodes': False,
-        'suppressTouch': False,
-        'animateRows': True,
-        'allowContextMenuWithControlKey': True,
-        'suppressContextMenu': False,
-        'suppressMenuFilterPanel': False,
-        'suppressMenuMainPanel': False,
-        'suppressMenuColumnPanel': False,
         'enableValue': True,
         'enablePivoting': True,
         'enableRowGroup': True,
@@ -172,6 +153,10 @@ def get_grid_options() -> Dict:
         'includeRowGroupColumns': True,
         'includeValueColumns': True,
         'includePivotColumns': True,
+        'animateRows': True,
+        'allowContextMenuWithControlKey': True,
+        'pagination': True,
+        'paginationPageSize': 20
     }
 
 def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> Dict:
@@ -199,10 +184,7 @@ def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> D
         autoHeaderCellRenderer=True,
         autoHeaderHeight=True,
         filterParams={
-            'filterOptions': [
-                'equals', 'notEqual', 'contains',
-                'notContains', 'startsWith', 'endsWith'
-            ],
+            'filterOptions': ['equals', 'notEqual', 'contains', 'notContains', 'startsWith', 'endsWith'],
             'defaultOption': 'contains'
         },
         menuTabs=['generalMenuTab', 'filterMenuTab', 'columnsMenuTab']
@@ -211,14 +193,9 @@ def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> D
     if group_by_column and group_by_column in df.columns:
         gb.configure_column(group_by_column, rowGroup=True, hide=True)
 
-    gb.configure_selection(
-        'multiple',
-        use_checkbox=True,
-        groupSelectsChildren=True,
-        header_checkbox=True
-    )
-    gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=100)
+    # Enable pivoting and grouping in the UI
     gb.configure_side_bar(filters_panel=True, columns_panel=True)
+    gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=20)
 
     status_panels = {
         "statusPanels": [
@@ -265,12 +242,10 @@ def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> D
                 }
             ],
             'defaultToolPanel': ''
-        },
-        rowHeight=50,
-        paginationPageSize=20,
-        onFirstDataRendered='onFirstDataRendered'
+        }
     )
 
+    # Add a chart button column
     button_renderer = JsCode('''
         class ButtonRenderer {
             init(params) {
@@ -413,8 +388,8 @@ def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> D
             }
         }
     ''')
-
     gb.configure_column('ACTION', headerName="CHART", cellRenderer=button_renderer)
+
     return gb.build(), custom_css
 
 def display_summary_stats(df: pd.DataFrame) -> None:
@@ -498,7 +473,7 @@ def main() -> None:
     st.title("📈 ETF Explorer Pro")
     st.markdown("""
     Comprehensive ETF analysis platform with advanced filtering, visualization,
-    and real-time data.
+    pivoting, and real-time data exploration.
     """)
 
     try:
@@ -514,7 +489,7 @@ def main() -> None:
 
     if etf_data is not None and not etf_data.empty:
         st.subheader("Filters")
-        col1, col2 = st.columns(2)
+        col1, col2 = st.columns([2, 2])
         with col1:
             unique_issuers = etf_data['ETF_ISSUER'].dropna().unique()
             selected_issuer = st.selectbox(
@@ -525,6 +500,9 @@ def main() -> None:
         with col2:
             group_by_issuer = st.checkbox("Group by ETF Issuer", value=False)
 
+        # Quick global search (quick filter)
+        quick_search = st.text_input("Quick Search (Global Filter)", value="", help="Type to filter all columns globally")
+
         filtered_data = (
             etf_data[etf_data['ETF_ISSUER'] == selected_issuer]
             if selected_issuer != "All" else etf_data
@@ -532,18 +510,26 @@ def main() -> None:
 
         display_summary_stats(filtered_data)
         display_export_section(filtered_data)
+
         st.subheader("ETF Data Grid")
+
         try:
             grid_options, custom_css = configure_grid(
                 filtered_data,
                 group_by_column="ETF_ISSUER" if group_by_issuer else None
             )
-            AgGrid(
+
+            # Enable quick filter in grid options
+            if quick_search:
+                grid_options["quickFilterText"] = quick_search
+
+            # Return both filtered and sorted data, and also selected rows
+            response = AgGrid(
                 filtered_data,
                 gridOptions=grid_options,
                 enable_enterprise_modules=True,
-                update_mode='NO_UPDATE',
-                data_return_mode='filtered',
+                update_mode=GridUpdateMode.MODEL_CHANGED,
+                data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
                 fit_columns_on_grid_load=True,
                 width='100%',
                 height=800,
@@ -553,6 +539,14 @@ def main() -> None:
                 reload_data=True,
                 custom_css=custom_css
             )
+
+            selected_rows = response['selected_rows']
+
+            if selected_rows:
+                st.subheader("Selected Rows Details")
+                sel_df = pd.DataFrame(selected_rows)
+                st.dataframe(sel_df)
+
         except Exception as e:
             st.error(f"Error displaying grid: {str(e)}")
             logger.error(f"Grid error: {str(e)}")
