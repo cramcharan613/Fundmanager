@@ -11,7 +11,6 @@ import xlsxwriter
 import time
 import aiohttp
 
-# Set basic page config
 st.set_page_config(
     layout="wide",
     page_title="ETF Explorer Pro",
@@ -91,7 +90,7 @@ class ETFDataFetcher:
 
                 df = self.preprocess_numeric_data(df)
 
-                # Move CUSIP to the front if present
+                # Move CUSIP to front if present
                 if 'CUSIP' in df.columns:
                     cols = ['CUSIP'] + [c for c in df.columns if c != 'CUSIP']
                     df = df[cols]
@@ -111,6 +110,7 @@ def load_data() -> pd.DataFrame:
     return loop.run_until_complete(fetcher.fetch_stockanalysis_data())
 
 def get_grid_options() -> Dict:
+    # No pagination, rely on a large scrollable grid
     return {
         'enableRangeSelection': True,
         'enableCharts': True,
@@ -142,25 +142,14 @@ def get_grid_options() -> Dict:
         'includeRowGroupColumns': True,
         'includeValueColumns': True,
         'includePivotColumns': True,
-        'animateRows': True,
-        'allowContextMenuWithControlKey': True,
-        'pagination': True,
-        'paginationPageSize': 20
+        # Disable pagination for continuous scrolling:
+        'pagination': False,
+        # Set rowModelType to clientSide to just show all data:
+        'rowModelType': 'clientSide'
     }
 
 def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> Dict:
     gb = GridOptionsBuilder.from_dataframe(df)
-    custom_css = {
-        ".ag-status-bar": {
-            "font-size": "14px",
-            "font-weight": "500",
-            "color": "var(--text-color)"
-        },
-        ".ag-status-bar .ag-status-name-value": {
-            "font-size": "14px",
-        }
-    }
-
     gb.configure_default_column(
         editable=True,
         sortable=True,
@@ -188,23 +177,9 @@ def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> D
         groupSelectsChildren=True,
         header_checkbox=True
     )
-    gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=20)
-
-    status_panels = {
-        "statusPanels": [
-            {"statusPanel": "agTotalAndFilteredRowCountComponent", "align": "left"},
-            {"statusPanel": "agTotalRowCountComponent", "align": "center"},
-            {"statusPanel": "agFilteredRowCountComponent", "align": "center"},
-            {"statusPanel": "agSelectedRowCountComponent", "align": "right"},
-            {"statusPanel": "agAggregationComponent", "align": "right"}
-        ]
-    }
 
     grid_options = get_grid_options()
-    gb.configure_grid_options(
-        statusBar=status_panels,
-        **grid_options
-    )
+    gb.configure_grid_options(**grid_options)
 
     button_renderer = JsCode('''
         class ButtonRenderer {
@@ -275,14 +250,6 @@ def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> D
                         font-size: 16px;
                         transition: all 0.3s ease;
                     `;
-                    closeBtn.addEventListener('mouseover', () => {
-                        closeBtn.style.background = 'rgba(255,255,255,0.2)';
-                        closeBtn.style.transform = 'scale(1.1)';
-                    });
-                    closeBtn.addEventListener('mouseout', () => {
-                        closeBtn.style.background = 'rgba(255,255,255,0.1)';
-                        closeBtn.style.transform = 'scale(1)';
-                    });
                     closeBtn.onclick = () => {
                         modal.style.opacity = '0';
                         setTimeout(() => document.body.removeChild(modal), 300);
@@ -350,7 +317,7 @@ def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> D
     ''')
     gb.configure_column('ACTION', headerName="CHART", cellRenderer=button_renderer)
 
-    return gb.build(), custom_css
+    return gb.build(), None
 
 def display_summary_stats(df: pd.DataFrame) -> None:
     try:
@@ -373,124 +340,25 @@ def display_summary_stats(df: pd.DataFrame) -> None:
         st.toast(f"📉 Avg Expense Ratio: **{avg_expense:.2f}%**", icon="🧾")
     except Exception as e:
         st.error(f"Failed to calculate and display summary stats: {str(e)}")
-        logger.error(f"Summary stats error: {str(e)}")
-
-def export_data(df: pd.DataFrame, format: str = 'csv') -> tuple[Optional[bytes], Optional[str], Optional[str]]:
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    try:
-        if format.lower() == 'csv':
-            buffer = io.BytesIO()
-            df.to_csv(buffer, index=False, encoding='utf-8')
-            mime_type = "text/csv"
-            file_extension = "csv"
-        elif format.lower() == 'excel':
-            buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                df.to_excel(writer, index=False, sheet_name='ETF_Data')
-                worksheet = writer.sheets['ETF_Data']
-                for i, col in enumerate(df.columns):
-                    max_length = max(
-                        df[col].astype(str).apply(len).max(),
-                        len(str(col))
-                    ) + 2
-                    worksheet.set_column(i, i, max_length)
-            mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            file_extension = "xlsx"
-        else:
-            raise ValueError(f"Unsupported export format: {format}")
-        buffer.seek(0)
-        bytes_data = buffer.getvalue()
-        filename = f"etf_data_{timestamp}.{file_extension}"
-        return bytes_data, filename, mime_type
-    except Exception as e:
-        logger.error(f"Export error: {str(e)}")
-        st.error(f"Failed to export data: {str(e)}")
-        return None, None, None
-
-# Dark/Light mode CSS
-light_mode_css = """
-:root {
-    --bg-color: #f0f2f5;
-    --text-color: #333;
-    --header-bg: #f0f2f5;
-}
-body {
-    background: var(--bg-color);
-    color: var(--text-color);
-}
-"""
-
-dark_mode_css = """
-:root {
-    --bg-color: #121212;
-    --text-color: #dddddd;
-    --header-bg: #1f1f1f;
-}
-body {
-    background: var(--bg-color) !important;
-    color: var(--text-color) !important;
-}
-.ag-root-wrapper, .ag-header, .ag-header-container, .ag-status-bar {
-    background: var(--header-bg) !important;
-    color: var(--text-color) !important;
-}
-"""
-
-def display_export_section(df: pd.DataFrame) -> None:
-    export_format = st.selectbox(
-        "Export Format",
-        options=["CSV", "Excel"],
-        key="export_format"
-    )
-    if export_format:
-        bytes_data, filename, mime_type = export_data(df, export_format.lower())
-        if bytes_data and filename and mime_type:
-            st.download_button(
-                label=f"📥 Download {export_format}",
-                data=bytes_data,
-                file_name=filename,
-                mime=mime_type,
-                key=f"download_{export_format.lower()}",
-                help=f"Click to download the ETF data as {export_format} file"
-            )
 
 def main() -> None:
-    # Dark/Light mode toggle
-    dark_mode = st.sidebar.checkbox("Dark Mode", value=False)
-
-    # Apply chosen theme CSS
-    if dark_mode:
-        st.markdown(f"<style>{dark_mode_css}</style>", unsafe_allow_html=True)
-    else:
-        st.markdown(f"<style>{light_mode_css}</style>", unsafe_allow_html=True)
-
     st.title("📈 ETF Explorer Pro")
     st.markdown("""
-    **A modern, interactive platform for exploring ETFs**:
-    - Toggle dark/light mode using the sidebar.
-    - Filter, pivot, and group data to your liking.
-    - Export filtered results.
+    Explore ETFs with interactive filtering, grouping, pivoting, and infinite scrolling.
+    Use Streamlit's built-in theme toggle in the settings to switch between dark and light modes.
     """)
 
-    try:
-        with st.spinner("Loading ETF data..."):
-            start_time = time.time()
-            etf_data = load_data()
-            load_time = time.time() - start_time
-            st.success(f"Data loaded in {load_time:.2f} seconds")
-    except Exception as e:
-        st.error(f"Failed to load ETF data: {str(e)}")
-        return
-
+    with st.spinner("Loading ETF data..."):
+        etf_data = load_data()
     if etf_data.empty:
         st.error("No data available.")
         return
 
-    # Layout with 2 columns: left col = 10%, right col = 90%
+    # Two columns: left ~10%, right ~90%
     col1, col2 = st.columns([1,9])
 
-    # Left column: All dropdowns and checkboxes
     with col1:
+        # Filters on the left
         unique_issuers = etf_data['ETF_ISSUER'].dropna().unique()
         selected_issuer = st.selectbox(
             "Filter by ETF Issuer",
@@ -498,51 +366,93 @@ def main() -> None:
             index=0
         )
         group_by_issuer = st.checkbox("Group by ETF Issuer", value=False)
+        # Removed sidebar and no custom CSS, rely on native theme
+        # Export options also on the left
+        export_format = st.selectbox(
+            "Export Format",
+            options=["CSV", "Excel"],
+            key="export_format"
+        )
+        if export_format:
+            # Export
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            bytes_data, filename, mime_type = None, None, None
+            if export_format.lower() == 'csv':
+                buffer = io.BytesIO()
+                etf_data.to_csv(buffer, index=False, encoding='utf-8')
+                buffer.seek(0)
+                bytes_data = buffer.getvalue()
+                filename = f"etf_data_{timestamp}.csv"
+                mime_type = "text/csv"
+            else:
+                buffer = io.BytesIO()
+                with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                    etf_data.to_excel(writer, index=False, sheet_name='ETF_Data')
+                    worksheet = writer.sheets['ETF_Data']
+                    for i, col in enumerate(etf_data.columns):
+                        max_length = max(
+                            etf_data[col].astype(str).apply(len).max(),
+                            len(str(col))
+                        ) + 2
+                        worksheet.set_column(i, i, max_length)
+                buffer.seek(0)
+                bytes_data = buffer.getvalue()
+                filename = f"etf_data_{timestamp}.xlsx"
+                mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
-        # Export options on left as well
-        display_export_section(etf_data)
+            if bytes_data and filename and mime_type:
+                st.download_button(
+                    label=f"📥 Download {export_format}",
+                    data=bytes_data,
+                    file_name=filename,
+                    mime=mime_type,
+                    key=f"download_{export_format.lower()}",
+                    help=f"Click to download the ETF data as {export_format} file"
+                )
 
-    # Right column: Quick search above the grid
-    filtered_data = etf_data[etf_data['ETF_ISSUER'] == selected_issuer] if selected_issuer != "All" else etf_data
+    # Filter data
+    filtered_data = etf_data if selected_issuer == "All" else etf_data[etf_data['ETF_ISSUER'] == selected_issuer]
 
     display_summary_stats(filtered_data)
 
-    quick_search = st.text_input("Global Quick Search", value="", help="Type to filter all columns globally")
+    with col2:
+        quick_search = st.text_input("Global Quick Search", value="", help="Type to filter all columns globally")
 
-    try:
-        grid_options, custom_css = configure_grid(
-            filtered_data,
-            group_by_column="ETF_ISSUER" if group_by_issuer else None
-        )
-        if quick_search:
-            grid_options["quickFilterText"] = quick_search
+        try:
+            grid_options, _ = configure_grid(
+                filtered_data,
+                group_by_column="ETF_ISSUER" if group_by_issuer else None
+            )
+            if quick_search:
+                grid_options["quickFilterText"] = quick_search
 
-        response = AgGrid(
-            filtered_data,
-            gridOptions=grid_options,
-            enable_enterprise_modules=True,
-            update_mode=GridUpdateMode.MODEL_CHANGED,
-            data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
-            fit_columns_on_grid_load=True,
-            width='100%',
-            height=800,
-            allow_unsafe_jscode=True,
-            theme='streamlit',
-            enable_quicksearch=True,
-            reload_data=True,
-            custom_css=custom_css
-        )
+            # No pagination, infinite scroll (all data in one go)
+            response = AgGrid(
+                filtered_data,
+                gridOptions=grid_options,
+                enable_enterprise_modules=True,
+                update_mode=GridUpdateMode.MODEL_CHANGED,
+                data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
+                fit_columns_on_grid_load=True,
+                width='100%',
+                height=800,
+                allow_unsafe_jscode=True,
+                theme='streamlit',
+                enable_quicksearch=True,
+                reload_data=True
+            )
 
-        selected_rows = response['selected_rows']
+            selected_rows = response['selected_rows']
 
-        if selected_rows:
-            st.subheader("Selected Rows Details")
-            sel_df = pd.DataFrame(selected_rows)
-            st.dataframe(sel_df)
+            if selected_rows:
+                st.subheader("Selected Rows Details")
+                sel_df = pd.DataFrame(selected_rows)
+                st.dataframe(sel_df)
 
-    except Exception as e:
-        st.error(f"Error displaying grid: {str(e)}")
-        logger.error(f"Grid error: {str(e)}")
+        except Exception as e:
+            st.error(f"Error displaying grid: {str(e)}")
+            logger.error(f"Grid error: {str(e)}")
 
 if __name__ == "__main__":
     main()
