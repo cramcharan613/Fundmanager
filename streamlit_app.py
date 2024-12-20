@@ -475,7 +475,7 @@ def export_dialog(data):
                 data.to_excel(writer, index=False, sheet_name="Sheet1")
             excel_data = output.getvalue()
             st.download_button("Download Excel", excel_data, "data.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            )
+            
 def main() -> None:
     st.title("📈 ETF Explorer Pro")
     st.markdown("Explore the Complete list of US ETF's")
