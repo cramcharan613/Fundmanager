@@ -461,22 +461,28 @@ def export_dialog(data):
     
     if st.button("Export"):
         if export_format == "CSV":
+            # Generate CSV and download directly
+            csv_data = data.to_csv(index=False).encode('utf-8')
             st.download_button(
-                label="Download CSV",
-                data=data.to_csv(index=False).encode('utf-8'),
+                label="Download Now",
+                data=csv_data,
                 file_name="exported_data.csv",
-                mime="text/csv"
+                mime="text/csv",
+                on_click=lambda: st.session_state.pop("export_dialog", None)
             )
         elif export_format == "Excel":
+            # Generate Excel and download directly
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 data.to_excel(writer, index=False, sheet_name='Sheet1')
             output.seek(0)
+            excel_data = output.getvalue()
             st.download_button(
-                label="Download Excel",
-                data=output,
+                label="Download Now",
+                data=excel_data,
                 file_name="exported_data.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                on_click=lambda: st.session_state.pop("export_dialog", None)
             )
 def main() -> None:
     st.title("📈 ETF Explorer Pro")
