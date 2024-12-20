@@ -549,25 +549,25 @@ def main() -> None:
         if st.button("Export Data"):
             export_dialog(pd.DataFrame(response['data']))
         export_buttons = """
-        <script>
-            function exportToExcel() {
-                if (window.gridApi) {
-                    window.gridApi.exportDataAsExcel();
-                } else {
-                    console.error('Grid API not initialized.');
-                }
+    <script>
+        function exportToExcel() {
+            if (window.gridApi) {
+                window.gridApi.exportDataAsExcel();
+            } else {
+                console.error('Grid API not initialized.');
             }
-            function exportToCsv() {
-                if (window.gridApi) {
-                    window.gridApi.exportDataAsCsv();
-                } else {
-                    console.error('Grid API not initialized.');
-                }
+        }
+        function exportToCsv() {
+            if (window.gridApi) {
+                window.gridApi.exportDataAsCsv();
+            } else {
+                console.error('Grid API not initialized.');
             }
-        </script>
-        <button onclick="exportToExcel()" style="margin-right: 10px; padding: 10px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">Export to Excel</button>
-        <button onclick="exportToCsv()" style="padding: 10px; background-color: #2196F3; color: white; border: none; border-radius: 5px; cursor: pointer;">Export to CSV</button>
-        """
+        }
+    </script>
+    <button onclick="exportToExcel()" style="margin-right: 10px; padding: 10px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">Export to Excel</button>
+    <button onclick="exportToCsv()" style="padding: 10px; background-color: #2196F3; color: white; border: none; border-radius: 5px; cursor: pointer;">Export to CSV</button>
+    """
         st.components.v1.html(export_buttons, height=50)
 
 if __name__ == "__main__":
