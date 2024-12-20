@@ -528,10 +528,7 @@ def main() -> None:
        
             if quick_search:
                 final_grid_options["quickFilterText"] = quick_search
-        with col4:
-            if st.button("Export Data"):
-                export_dialog(pd.DataFrame(response['data']))
-       
+      
         response = AgGrid(
             filtered_data,
             gridOptions=final_grid_options,
@@ -547,7 +544,10 @@ def main() -> None:
             enable_quicksearch=True,
             reload_data=True
         )
-
+          with col4:
+            if st.button("Export Data"):
+                export_dialog(pd.DataFrame(response['data']))
+       
         # Trigger modal for export options
 
   
