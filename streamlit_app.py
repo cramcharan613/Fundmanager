@@ -1,10 +1,9 @@
-
 import asyncio
 from typing import Dict, Optional, Any
 from datetime import datetime
 import logging
 import streamlit as st
-from st_aggrid import AgGrid, GridOptionsBuilder, DataReturnMode, GridUpdateMode, JsCode
+from st_aggrid import AgGrid, DataReturnMode, GridUpdateMode, JsCode
 import pandas as pd
 import io
 import xlsxwriter
@@ -20,7 +19,7 @@ st.set_page_config(
     page_icon="📈"
 )
 
-# Custom CSS for a modern look
+# Custom CSS for modern UI
 st.markdown("""
 <style>
 body {
@@ -155,7 +154,7 @@ def load_data() -> pd.DataFrame:
 
 class ETF:
     def __init__(self, data: Dict[str, str]):
-        self.data = data  # data is assumed to be a dict
+        self.data = data
 
     def _repr_html_(self):
         html = "<table border='1' style='border-collapse: collapse; font-family: sans-serif; font-size:14px;'>"
@@ -166,12 +165,14 @@ class ETF:
         return html
 
 def get_grid_options() -> Dict:
+    """Get consolidated grid options configuration with infinite scroll (no pagination)."""
     return {
         'enableRangeSelection': True,
         'enableCharts': True,
         'suppressRowClickSelection': False,
         'enableSorting': True,
         'enableFilter': True,
+        'groupSelectsChildren': True,
         'enableColResize': True,
         'rowSelection': 'multiple',
         'enableStatusBar': True,
@@ -189,6 +190,23 @@ def get_grid_options() -> Dict:
         'enableCsvExport': True,
         'enableExcelExport': True,
         'enablePivotMode': True,
+        'suppressAggFuncInHeader': False,
+        'suppressColumnVirtualisation': False,
+        'suppressRowVirtualisation': False,
+        'suppressMenuHide': False,
+        'suppressMovableColumns': False,
+        'suppressFieldDotNotation': True,
+        'suppressCopyRowsToClipboard': False,
+        'suppressCopySingleCellRanges': False,
+        'suppressMultiRangeSelection': False,
+        'suppressParentsInRowNodes': False,
+        'suppressTouch': False,
+        'animateRows': True,
+        'allowContextMenuWithControlKey': True,
+        'suppressContextMenu': False,
+        'suppressMenuFilterPanel': False,
+        'suppressMenuMainPanel': False,
+        'suppressMenuColumnPanel': False,
         'enableValue': True,
         'enablePivoting': True,
         'enableRowGroup': True,
@@ -197,14 +215,275 @@ def get_grid_options() -> Dict:
         'includeRowGroupColumns': True,
         'includeValueColumns': True,
         'includePivotColumns': True,
+        # No pagination for infinite scrolling
         'pagination': False,
         'rowModelType': 'clientSide'
     }
 
+def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> Dict:
+    """Configure the AG-Grid with enhanced features."""
+    from st_aggrid import GridOptionsBuilder
+    gb = GridOptionsBuilder.from_dataframe(df)
+    custom_css = {
+        ".ag-status-bar": {
+            "font-size": "16px",
+            "font-weight": "bold",
+            "color": "#333",
+        },
+        ".ag-status-bar .ag-status-name-value": {
+            "font-size": "16px",
+        }
+    }
+
+    gb.configure_default_column(
+        editable=True,
+        sortable=True,
+        filter=True,
+        resizable=True,
+        wrapHeaderText=True,
+        autoHeaderLabel=True,
+        autoHeaderTooltip=True,
+        autoHeaderCellFilter=True,
+        autoHeaderCellRenderer=True,
+        autoHeaderHeight=True,
+        filterParams={
+            'filterOptions': [
+                'equals', 'notEqual', 'contains',
+                'notContains', 'startsWith', 'endsWith'
+            ],
+            'defaultOption': 'contains'
+        },
+        menuTabs=['generalMenuTab', 'filterMenuTab', 'columnsMenuTab']
+    )
+
+    if group_by_column and group_by_column in df.columns:
+        gb.configure_column(group_by_column, rowGroup=True, hide=True)
+
+    gb.configure_selection(
+        'multiple',
+        use_checkbox=True,
+        groupSelectsChildren=True,
+        header_checkbox=True
+    )
+    # Removed pagination config to rely on infinite scroll
+    # Set a suitable rowHeight if needed
+    gb.configure_grid_options(rowHeight=50, paginationPageSize=20, onFirstDataRendered='onFirstDataRendered')
+
+    # Status panels
+    status_panels = {
+        "statusPanels": [
+            {"statusPanel": "agTotalAndFilteredRowCountComponent", "align": "left"},
+            {"statusPanel": "agTotalRowCountComponent", "align": "center"},
+            {"statusPanel": "agFilteredRowCountComponent", "align": "center"},
+            {"statusPanel": "agSelectedRowCountComponent", "align": "right"},
+            {"statusPanel": "agAggregationComponent", "align": "right"}
+        ]
+    }
+
+    # Integrate default grid options
+    grid_options = get_grid_options()
+    gb.configure_grid_options(
+        statusBar=status_panels,
+        **grid_options,
+        rowStyle={
+            'background-color': 'rgba(0, 0, 0, 0.05)',
+            'border-radius': '10px',
+            'box-shadow': '0px 1px 5px rgba(0, 0, 0, 0.2)',
+            'margin-bottom': '5px',
+            'padding': '10px'
+        },
+        headerStyle={
+            'background-color': 'rgba(0, 0, 0, 0.1)',
+            'border-radius': '10px',
+            'box-shadow': '0px 1px 5px rgba(0, 0, 0, 0.2)',
+            'padding': '10px'
+        },
+        sideBar={
+            'toolPanels': [
+                {
+                    'id': 'columns',
+                    'labelDefault': 'Columns',
+                    'labelKey': 'columns',
+                    'iconKey': 'columns',
+                    'toolPanel': 'agColumnsToolPanel'
+                },
+                {
+                    'id': 'filters',
+                    'labelDefault': 'Filters',
+                    'labelKey': 'filters',
+                    'iconKey': 'filter',
+                    'toolPanel': 'agFiltersToolPanel'
+                }
+            ],
+            'defaultToolPanel': ''
+        },
+    )
+
+    # Button renderer for ACTION column
+    button_renderer = JsCode('''
+        class ButtonRenderer {
+            init(params) {
+                this.eGui = document.createElement('button');
+                this.eGui.innerHTML = '📈 View Chart';
+                this.eGui.style.cssText = `
+                    background: linear-gradient(45deg, #2196F3, #21CBF3);
+                    color: white;
+                    border: none;
+                    padding: 5px 15px;
+                    border-radius: 5px;
+                    cursor: pointer;
+                    font-weight: bold;
+                    transition: all 0.3s ease;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+                `;
+
+                this.eGui.addEventListener('mouseover', () => {
+                    this.eGui.style.transform = 'translateY(-2px)';
+                    this.eGui.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
+                });
+
+                this.eGui.addEventListener('mouseout', () => {
+                    this.eGui.style.transform = 'translateY(0)';
+                    this.eGui.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+                });
+
+                this.eGui.addEventListener('click', () => {
+                    const modal = document.createElement('div');
+                    modal.style.cssText = `
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background: rgba(0,0,0,0.8);
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        z-index: 1000;
+                        backdrop-filter: blur(5px);
+                    `;
+
+                    const modalContent = document.createElement('div');
+                    modalContent.style.cssText = `
+                        background: #1E1E1E;
+                        padding: 20px;
+                        border-radius: 15px;
+                        width: 90%;
+                        height: 90%;
+                        position: relative;
+                        box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+                        border: 1px solid rgba(255,255,255,0.1);
+                    `;
+
+                    const closeBtn = document.createElement('button');
+                    closeBtn.innerHTML = '✕';
+                    closeBtn.style.cssText = `
+                        position: absolute;
+                        top: 15px;
+                        right: 15px;
+                        background: rgba(255,255,255,0.1);
+                        color: #fff;
+                        border: none;
+                        border-radius: 50%;
+                        width: 30px;
+                        height: 30px;
+                        cursor: pointer;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 16px;
+                        transition: all 0.3s ease;
+                    `;
+
+                    closeBtn.addEventListener('mouseover', () => {
+                        closeBtn.style.background = 'rgba(255,255,255,0.2)';
+                        closeBtn.style.transform = 'scale(1.1)';
+                    });
+
+                    closeBtn.addEventListener('mouseout', () => {
+                        closeBtn.style.background = 'rgba(255,255,255,0.1)';
+                        closeBtn.style.transform = 'scale(1)';
+                    });
+
+                    closeBtn.onclick = () => {
+                        modal.style.opacity = '0';
+                        setTimeout(() => document.body.removeChild(modal), 300);
+                    };
+
+                    const ticker = params.data.TICKER_SYMBOL;
+                    const widgetContainer = document.createElement('div');
+                    widgetContainer.className = 'tradingview-widget-container';
+                    widgetContainer.style.cssText = `
+                        width: 100%;
+                        height: calc(100% - 40px);
+                    `;
+
+                    const widgetDiv = document.createElement('div');
+                    widgetDiv.className = 'tradingview-widget-container__widget';
+                    widgetDiv.style.cssText = `
+                        width: 100%;
+                        height: 100%;
+                    `;
+
+                    widgetContainer.appendChild(widgetDiv);
+                    modalContent.appendChild(closeBtn);
+                    modalContent.appendChild(widgetContainer);
+                    modal.appendChild(modalContent);
+                    document.body.appendChild(modal);
+
+                    const script = document.createElement('script');
+                    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+                    script.async = true;
+                    script.innerHTML = JSON.stringify({
+                        "autosize": true,
+                        "symbol": ticker,
+                        "interval": "D",
+                        "timezone": "Etc/UTC",
+                        "theme": "dark",
+                        "style": "1",
+                        "locale": "en",
+                        "enable_publishing": false,
+                        "allow_symbol_change": true,
+                        "calendar": true,
+                        "support_host": "https://www.tradingview.com",
+                        "width": "100%",
+                        "height": "100%",
+                        "save_image": true,
+                        "hideideas": true,
+                        "studies": [
+                            "MASimple@tv-basicstudies",
+                            "RSI@tv-basicstudies",
+                            "MACD@tv-basicstudies",
+                            "BB@tv-basicstudies"
+                        ],
+                        "show_popup_button": true,
+                        "popup_width": "1000",
+                        "popup_height": "650",
+                        "container_id": "tradingview_chart"
+                    });
+                    widgetContainer.appendChild(script);
+
+                    // Fade-in animation
+                    modal.style.opacity = '0';
+                    modal.style.transition = 'opacity 0.3s ease';
+                    setTimeout(() => modal.style.opacity = '1', 10);
+                });
+            }
+
+            getGui() {
+                return this.eGui;
+            }
+        }
+    ''')
+
+    gb.configure_column('ACTION', headerName="CHART", cellRenderer=button_renderer)
+
+    return gb.build(), custom_css
+
 def create_enhanced_tradingview_chart(ticker: str, container_id: str) -> str:
-    # Omitted for brevity: Use the provided code snippet
-    # (The function body is the same as provided in the user's snippet)
-    # Insert the exact function code here.
+    # Insert the previously provided function code for create_enhanced_tradingview_chart here
+    # For brevity, assuming the same code as previous final integrated solution
+    # ...
     return f"""
     <div class="tradingview-widget-container" style="height: 100%; width: 100%;">
         <div id="{container_id}" style="height: calc(100vh - 200px); width: 100%;"></div>
@@ -340,13 +619,11 @@ def create_tradingview_company_profile(ticker: str) -> str:
 
 def show_tradingview_analysis(ticker: str):
     tab1, tab2, tab3 = st.tabs(["📈 Chart", "📊 Technical Analysis", "🏢 Profile"])
-    
     with tab1:
         st.components.v1.html(
             create_enhanced_tradingview_chart(ticker, "tradingview_chart"),
             height=800
         )
-        
     with tab2:
         col1, col2 = st.columns([2, 1])
         with col1:
@@ -361,7 +638,6 @@ def show_tradingview_analysis(ticker: str):
                 <p>Coming soon...</p>
             </div>
             """, unsafe_allow_html=True)
-            
     with tab3:
         st.components.v1.html(
             create_tradingview_company_profile(ticker),
@@ -372,7 +648,7 @@ def main() -> None:
     st.title("📈 ETF Explorer Pro")
     st.markdown("""
     Explore ETFs with interactive filtering, grouping, pivoting, infinite scrolling,
-    custom CSS styling, and JavaScript interactions.
+    custom CSS styling, JavaScript interactions, and TradingView integration.
     """)
 
     with st.spinner("Loading ETF data..."):
@@ -414,7 +690,7 @@ def main() -> None:
                 bytes_data = buffer.getvalue()
                 filename = f"etf_data_{timestamp}.xlsx"
                 mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            
+
             st.download_button(
                 label=f"Download {export_format}",
                 data=bytes_data,
@@ -422,7 +698,7 @@ def main() -> None:
                 mime=mime_type
             )
 
-    # Filter data
+    # Apply filters
     filtered_data = etf_data.copy()
     if selected_issuer != "All":
         filtered_data = filtered_data[filtered_data['ETF_ISSUER'] == selected_issuer]
@@ -436,57 +712,11 @@ def main() -> None:
     with col2:
         quick_search = st.text_input("Global Quick Search", value="", help="Type to filter all columns globally")
 
-        gb = GridOptionsBuilder.from_dataframe(filtered_data)
-        gb.configure_default_column(
-            editable=False,
-            sortable=True,
-            filter=True,
-            resizable=True,
-            wrapHeaderText=True,
-            autoHeaderLabel=True,
-            autoHeaderTooltip=True,
-            autoHeaderCellFilter=True,
-            autoHeaderCellRenderer=True,
-            autoHeaderHeight=True,
-            filterParams={
-                'filterOptions': ['equals', 'notEqual', 'contains', 'notContains', 'startsWith', 'endsWith'],
-                'defaultOption': 'contains'
-            },
-            menuTabs=['generalMenuTab', 'filterMenuTab', 'columnsMenuTab']
-        )
-
-        gb.configure_column(
-            "TICKER_SYMBOL",
-            cellRenderer=JsCode("""
-            function(params) {
-                return `
-                    <div style="display: flex; align-items: center; gap:8px;">
-                        <span style="font-weight: bold;">${params.value}</span>
-                        <button onclick="showAdvancedChart('${params.value}')"
-                                style="background: linear-gradient(45deg, #2196F3, #21CBF3);
-                                       color: white;
-                                       border: none;
-                                       padding:4px 12px;
-                                       border-radius:4px;
-                                       cursor:pointer;
-                                       display:flex;
-                                       align-items:center;
-                                       gap:4px;">
-                            <span>📈</span>
-                            <span>Advanced Chart</span>
-                        </button>
-                    </div>
-                `;
-            }
-            """)
-        )
-
-        grid_options = get_grid_options()
+        # Configure and build grid with the snippet's configure_grid()
+        final_grid_options, custom_css = configure_grid(filtered_data, group_by_column=None)
+        # Apply quickFilterText if quick_search is provided
         if quick_search:
-            grid_options["quickFilterText"] = quick_search
-
-        final_grid_options = gb.build()
-        final_grid_options.update(grid_options)
+            final_grid_options["quickFilterText"] = quick_search
 
         response = AgGrid(
             filtered_data,
@@ -497,117 +727,45 @@ def main() -> None:
             fit_columns_on_grid_load=True,
             width='100%',
             height=600,
-            allow_unsafe_jscode=True,  # IMPORTANT for JS code
+            allow_unsafe_jscode=True,
             theme='streamlit',
             enable_quicksearch=True,
             reload_data=True
         )
 
         selected_rows = response['selected_rows']
-        # Debug print selected_rows structure if needed
-        # st.write("DEBUG selected_rows:", selected_rows)
 
         highlight_button = st.button("Highlight Selected Rows")
         if highlight_button and selected_rows is not None and len(selected_rows) > 0:
-            # Get tickers and highlight rows via JS
-            # Ensure row is a dict before accessing keys
             tickers_to_highlight = [row['TICKER_SYMBOL'] for row in selected_rows if isinstance(row, dict) and 'TICKER_SYMBOL' in row]
             if tickers_to_highlight:
-                st_javascript(
-                    code=f"""
-                    const tickers = {tickers_to_highlight};
-                    const rows = document.querySelectorAll('.ag-center-cols-container .ag-row');
-                    rows.forEach(row => {{
-                        const tickerCell = row.querySelector("[col-id='TICKER_SYMBOL'] .ag-cell-value");
-                        if (tickerCell && tickers.includes(tickerCell.innerText)) {{
-                            row.classList.add('highlighted-row');
-                        }}
-                    }});
+                # Use a setTimeout to ensure DOM is ready
+                st.components.v1.html(
+                    f"""
+                    <script>
+                    setTimeout(() => {{
+                        const tickers = {tickers_to_highlight};
+                        const rows = document.querySelectorAll('.ag-center-cols-container .ag-row');
+                        rows.forEach(row => {{
+                            const tickerCell = row.querySelector("[col-id='TICKER_SYMBOL'] .ag-cell-value");
+                            if (tickerCell && tickers.includes(tickerCell.innerText)) {{
+                                row.classList.add('highlighted-row');
+                            }}
+                        }});
+                    }}, 1000);
+                    </script>
                     """,
-                    onload=False
+                    height=0,
+                    width=0
                 )
 
-        # Add JS for the Advanced Chart Modal
-        st.markdown("""
-        <script>
-        function showAdvancedChart(ticker) {
-            const modal = document.createElement('div');
-            modal.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: rgba(0,0,0,0.85);
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                z-index: 1000;
-                backdrop-filter: blur(5px);
-            `;
-        
-            const modalContent = document.createElement('div');
-            modalContent.style.cssText = `
-                width: 95%;
-                height: 90%;
-                background: #131722;
-                border-radius: 12px;
-                position: relative;
-                padding: 20px;
-                box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-            `;
-        
-            const closeButton = document.createElement('button');
-            closeButton.innerHTML = '✕';
-            closeButton.style.cssText = `
-                position: absolute;
-                top: 20px;
-                right: 20px;
-                background: rgba(255,255,255,0.1);
-                border: none;
-                color: white;
-                padding: 8px 16px;
-                border-radius: 4px;
-                cursor: pointer;
-                font-size: 16px;
-                z-index: 1001;
-            `;
-            closeButton.onclick = () => document.body.removeChild(modal);
-        
-            modalContent.appendChild(closeButton);
-            modal.appendChild(modalContent);
-            document.body.appendChild(modal);
-        
-            new TradingView.widget({
-                "autosize": true,
-                "symbol": ticker,
-                "interval": "D",
-                "timezone": "Etc/UTC",
-                "theme": "dark",
-                "style": "1",
-                "locale": "en",
-                "toolbar_bg": "#f1f3f6",
-                "enable_publishing": false,
-                "withdateranges": true,
-                "range": "YTD",
-                "allow_symbol_change": true,
-                "details": true,
-                "hotlist": true,
-                "calendar": true,
-                "container_id": "tradingview_modal"
-            });
-        }
-        </script>
-        """, unsafe_allow_html=True)
-
+        # If rows selected, display details and possibly TradingView analysis
         if selected_rows is not None and len(selected_rows) > 0:
             st.subheader("Selected Rows Details")
-            # Each row should be a dict, so just pass row as is
             etf_objects = [ETF(row) for row in selected_rows if isinstance(row, dict)]
             for etf_obj in etf_objects:
                 st.write(etf_obj)
 
-            # Show tradingview analysis for first selected ticker if any
             first_ticker = None
             for row in selected_rows:
                 if isinstance(row, dict) and 'TICKER_SYMBOL' in row:
