@@ -544,7 +544,7 @@ def main() -> None:
             enable_quicksearch=True,
             reload_data=True
         )
-          with col4:
+        with col4:
             if st.button("Export Data"):
                 export_dialog(pd.DataFrame(response['data']))
        
