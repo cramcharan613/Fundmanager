@@ -486,7 +486,7 @@ def export_dialog(data):
             )
 def main() -> None:
     st.title("📈 ETF Explorer Pro")
-    st.markdown("Explore ETFs with infinite scrolling, custom CSS, JS interactivity, filtering, exporting, and TradingView integration.")
+    st.markdown("Explore the Complete list of US ETF's")
 
     with st.spinner("Loading ETF data..."):
         etf_data = load_data()
@@ -521,12 +521,18 @@ def main() -> None:
     with col2:
         quick_search = st.text_input("Global Quick Search", value="", help="Type to filter all columns globally")
         final_grid_options, custom_css = configure_grid(filtered_data, group_by_column=None)
+        final_grid_options['onGridReady'] = """
+        function(params) {
+            window.gridApi = params.api;
+        }
+        """
         if quick_search:
             final_grid_options["quickFilterText"] = quick_search
 
         response = AgGrid(
             filtered_data,
             gridOptions=final_grid_options,
+           
             enable_enterprise_modules=True,
             update_mode=GridUpdateMode.MODEL_CHANGED,
             data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
@@ -545,21 +551,17 @@ def main() -> None:
         export_buttons = """
         <script>
             function exportToExcel() {
-                const gridDiv = document.querySelector('.ag-root-wrapper'); 
-                if (gridDiv && gridDiv.__agGridInstance) {
-                    const gridOptions = gridDiv.__agGridInstance.gridOptions;
-                    gridOptions.api.exportDataAsExcel();
+                if (window.gridApi) {
+                    window.gridApi.exportDataAsExcel();
                 } else {
-                    console.error('AgGrid instance not found.');
+                    console.error('Grid API not initialized.');
                 }
             }
             function exportToCsv() {
-                const gridDiv = document.querySelector('.ag-root-wrapper');
-                if (gridDiv && gridDiv.__agGridInstance) {
-                    const gridOptions = gridDiv.__agGridInstance.gridOptions;
-                    gridOptions.api.exportDataAsCsv();
+                if (window.gridApi) {
+                    window.gridApi.exportDataAsCsv();
                 } else {
-                    console.error('AgGrid instance not found.');
+                    console.error('Grid API not initialized.');
                 }
             }
         </script>
