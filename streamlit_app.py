@@ -101,7 +101,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 #-------------------------------------------------------------------------------------------
 app_title = "ETF EXPLORER"
-cdo_logo = """
+cdo_logo = f"""
 <style>
 @keyframes fadeInSlideIn {
     0% { opacity: 0; transform: translateY(-20px); }
@@ -154,9 +154,9 @@ cdo_logo = """
         </filter>
     </defs>
 </svg>
-       <h1 class="title">{0}</h1>
+       <h1 class="title">{app_title}</h1>
 </div>
-""".format(app_title)
+"""
 
 st.markdown(cdo_logo,unsafe_allow_html=True)
 
