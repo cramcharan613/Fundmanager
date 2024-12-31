@@ -101,8 +101,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 #-------------------------------------------------------------------------------------------
 app_title = "ETF EXPLORER"
-cdo_logo = """ 
-
+cdo_logo = """
 <style>
 @keyframes fadeInSlideIn {
     0% { opacity: 0; transform: translateY(-20px); }
@@ -128,7 +127,7 @@ cdo_logo = """
 </style>
 
 <div class="logo-container">
-     <svg fill="none" height="136"  viewbox="0 0 115 136" width="136"
+     <svg fill="none" height="136" viewBox="0 0 115 136" width="136"
      xmlns="http://www.w3.org/2000/svg">
     <g filter="url(#filter0_d_1_6)">
         <path class="animate" d="M107.447 0.0193964L103.207 17.5622L90.7955 4.37679L107.447 0.0193964Z" fill="#339966"/>
@@ -142,27 +141,22 @@ cdo_logo = """
         <path class="animate" d="M107.754 85.6843C111.702 73.5977 110.854 59.7016 106.959 48.622L99.5326 54.1993C101.605 60.1396 102.375 66.8414 101.538 73.9274C98.6819 98.1221 79.4779 117.375 55.4842 117.661C53.9857 117.654 52.5163 117.56 51.0796 117.384L46.7663 126.804C48.779 127.14 50.834 127.34 52.9205 127.4C64.4302 127.726 76.1859 123.747 86.1844 116.141C96.1829 108.534 103.806 97.7708 107.754 85.6843Z" fill="#5D6972"/>
         <path class="animate" d="M82.2477 65.9865C82.4566 65.7695 82.801 65.7853 82.9922 66.0208L83.4877 66.6307L84.5397 67.7161L85.391 68.764L86.2083 69.6024L88.0776 71.5262L88.8763 72.337C89.0779 72.5416 89.0795 72.8768 88.88 73.0818L69.0011 93.5109L59.407 103.508L56.5165 106.36L56.0866 106.865L55.943 107.006L54.718 108.382L53.6956 109.919C53.3277 110.379 53.0203 110.928 52.7913 111.535C52.5368 112.21 52.3851 112.942 52.3468 113.678C52.3086 114.414 52.3846 115.138 52.5697 115.798C52.7547 116.459 53.0443 117.04 53.4182 117.502L53.5073 117.362L53.8292 117.837C53.8734 117.902 53.9313 117.956 53.9985 117.995L54.4272 118.241C54.5005 118.283 54.5825 118.306 54.6662 118.307L60.1001 118.385C60.132 118.386 60.1638 118.383 60.1952 118.377L62.6798 117.921L65.5589 117.701L66.401 117.548L67.2222 117.463C67.4467 117.44 67.6594 117.574 67.7434 117.791L68.2323 119.056C68.26 119.127 68.3026 119.192 68.3571 119.244L69.634 120.48C69.6644 120.509 69.6912 120.542 69.7138 120.578L70.1302 121.245C70.3102 121.533 70.179 121.919 69.8648 122.025L57.8872 126.076L54.9871 126.754L52.2857 127.083C51.9661 127.122 51.6428 127.118 51.3237 127.073L50.1596 126.906C50.061 126.891 49.9878 126.803 49.9891 126.7C49.9906 126.577 49.8867 126.48 49.7683 126.494L47.0673 126.826C47.0077 126.834 46.9474 126.83 46.889 126.815L46.7721 126.786L46.2337 126.641C46.2018 126.632 46.1707 126.62 46.1409 126.605L45.5114 126.289C45.4129 126.24 45.3324 126.159 45.282 126.058L44.3428 124.184C44.3274 124.154 44.3149 124.121 44.3057 124.088L43.6635 121.785L43.1678 119.734L43.0354 118.519L43.0022 117.646L42.9818 115.764L43.0832 113.402L43.3725 111.247L43.7447 109.468L44.2888 107.607C44.2965 107.58 44.3062 107.555 44.3178 107.53L45.6216 104.751L46.6447 102.961L47.5518 101.727L48.5925 100.271L50.2677 98.4716L52.4557 96.2819L57.6934 90.8374L60.5306 88.0942L63.1275 85.3501L73.2691 75.3135L82.2477 65.9865Z" fill="#5D6972"/>
     </g>
-        <defs>
-            <filter id="filter0_d_1_6" x="0.289368" y="0.0194092" width="114.04" height="135.399" filterunits="userSpaceOnUse" color-interpolation-filters="sRGB">
-                <feflood flood-opacity="0" result="BackgroundImageFix"/>
-                <fecolormatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
-                <feoffset dy="4"/>
-                <fegaussianblur stdeviation="2"/>
-                <fecomposite in2="hardAlpha" operator="out"/>
-                <fecolormatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0"/>
-                <feblend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_6"/>
-                <feblend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_6" result="shape"/>
-            </filter>
-        </defs>
-    </svg>
+    <defs>
+        <filter id="filter0_d_1_6" x="0.289368" y="0.0194092" width="114.04" height="135.399" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+            <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+            <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+            <feOffset dy="4"/>
+            <feGaussianBlur stdDeviation="2"/>
+            <feComposite in2="hardAlpha" operator="out"/>
+            <feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0"/>
+            <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_6"/>
+            <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_6" result="shape"/>
+        </filter>
+    </defs>
+</svg>
        <h1 class="title">{0}</h1>
-     
 </div>
-
-
 """.format(app_title)
-
-# Add the logo to your Streamlit app
 
 st.markdown(cdo_logo,unsafe_allow_html=True)
 
