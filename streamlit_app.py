@@ -120,6 +120,13 @@ cdo_logo = """
     text-shadow: 2px 2px 4px #272053;
     animation: fadeInSlideIn 1s ease-out 1s both;
 }
+.sub-header {{
+    margin-top: 5px;
+    color: #5a5a5a;
+    font-size: 1.2em;
+    animation: fadeInSlideIn 1s ease-out 1.5s both;
+}}
+
 
 .stApp .stMultiSelect > div {
     pointer-events: auto !important;
@@ -155,7 +162,7 @@ cdo_logo = """
         </defs>
     </svg>
        <h1 class="title">ETF EXPLORER</h1>
-     
+        <h2 class="sub-header">Explore the Complete list of US ETF's</h2>
 </div>
 
 
@@ -191,6 +198,8 @@ def _set_block_container_style(
     st.markdown(styl, unsafe_allow_html=True)
 
 
+import streamlit as st
+
 def _set_st_app_style(
     header_bg_color: str = "transparent",
     select_div_bg_color: str = "transparent",
@@ -224,10 +233,12 @@ def _set_st_app_style(
     ):
     styl = f"""
     <style>
+        /* Header Styling */
         .stApp > header {{
             background-color: {header_bg_color};
         }}
-
+        
+        /* Select Box Styling */
         div[data-baseweb="select"] > div {{
             background-color: {select_div_bg_color};
             width: {select_div_width};
@@ -237,6 +248,7 @@ def _set_st_app_style(
             padding-bottom: {padding_bottom}rem;
         }}
         
+        /* DataFrame Styling */
         div[data-testid="stDataFrame"] {{
             background-color: {data_frame_bg_color};
             width: {data_frame_width};
@@ -247,12 +259,14 @@ def _set_st_app_style(
             font-size: {data_frame_font_size};
             color: {data_frame_font_color};
         }}
+        
+        /* Main App Container Styling */
         .stApp {{
-            margin: fixed;
+            position: relative; /* Changed from margin: fixed; */
             font-family: {font_family};
-            overflow: None;
+            overflow: hidden; /* Changed from overflow: None; to a valid value */
             background: linear-gradient(to top, {gradient_colors});
-            animation: gradient 15s ease infinite;
+            animation: gradientAnimation 15s ease infinite;
             height: {height};
             width: {width};
             background-attachment: fixed;
@@ -261,6 +275,7 @@ def _set_st_app_style(
             color: {text_color}; /* Ensuring text is readable */
         }}
 
+        /* Pseudo-elements for Star Animation */
         .stApp::before, .stApp::after {{
             content: '';
             position: absolute;
@@ -270,23 +285,25 @@ def _set_st_app_style(
             height: 100%;
             pointer-events: none;
             background: transparent;
+            z-index: -1; /* Ensure stars are behind content */
         }}
 
         .stApp::before {{
             background: radial-gradient(circle, {radial_gradient_color} 1px, transparent 1px);
             background-size: {radial_gradient_size_1};
-            animation: stars {star_animation_duration_1} linear infinite;
+            animation: starsAnimation1 {star_animation_duration_1} linear infinite;
             opacity: {opacity_1};
         }}
 
         .stApp::after {{
             background: radial-gradient(circle, {radial_gradient_color} 2px, transparent 2px);
             background-size: {radial_gradient_size_2};
-            animation: stars {star_animation_duration_2} linear infinite;
+            animation: starsAnimation2 {star_animation_duration_2} linear infinite;
             opacity: {opacity_2};
         }}
 
-        @keyframes stars {{
+        /* Keyframes for Star Animations */
+        @keyframes starsAnimation1 {{
             from {{
                 transform: translateY(0);
             }}
@@ -294,9 +311,42 @@ def _set_st_app_style(
                 transform: translateY(-200%);
             }}
         }}
+
+        @keyframes starsAnimation2 {{
+            from {{
+                transform: translateY(0);
+            }}
+            to {{
+                transform: translateY(-200%);
+            }}
+        }}
+
+        /* Gradient Animation */
+        @keyframes gradientAnimation {{
+            0% {{
+                background-position: 0% 50%;
+            }}
+            50% {{
+                background-position: 100% 50%;
+            }}
+            100% {{
+                background-position: 0% 50%;
+            }}
+        }}
+        
+        /* Subheader Styling */
+        .sub-header {{
+            margin-top: 5px;
+            color: #5a5a5a;
+            font-size: 1.2em;
+            animation: fadeInSlideIn 1s ease-out 1.5s both;
+        }}
     </style>
     """
     st.markdown(styl, unsafe_allow_html=True)
+
+# Call the styling function with default or customized parameters
+_set_st_app_style()
 
 _set_st_app_style()
 _set_block_container_style()
@@ -721,8 +771,6 @@ def export_dialog(data):
                 on_click=lambda: st.session_state.pop("export_dialog", None)
             )
 def main() -> None:
-    st.markdown("Explore the Complete list of US ETF's")
-
     with st.spinner("Loading ETF data..."):
         etf_data = load_data()
     if etf_data.empty:
