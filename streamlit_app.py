@@ -18,7 +18,7 @@ st.set_page_config(
     page_icon="📈"
 )
 
-# Custom CSS
+# Custom CSS#-------------------------------------------------------------------------------------------
 st.markdown("""
 <style>
 :root {
@@ -95,11 +95,216 @@ body {
 }
 </style>
 """, unsafe_allow_html=True)
-
+#-------------------------------------------------------------------------------------------
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+#-------------------------------------------------------------------------------------------
+cdo_logo = """ 
 
+<style>
+@keyframes fadeInSlideIn {
+    0% { opacity: 0; transform: translateY(-20px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+.logo-container {
+    display: flex;
+    align-items: center;
+    margin-bottom: 5px;
+    animation: fadeInSlideIn 1s ease-out;
+}
+.logo { animation: fadeInSlideIn 1s ease-out 0.5s both; }
+.title {
+    margin-left: 20px;
+    color: #7c8096;
+    text-shadow: 2px 2px 4px #272053;
+    animation: fadeInSlideIn 1s ease-out 1s both;
+}
+
+.stApp .stMultiSelect > div {
+    pointer-events: auto !important;
+}
+</style>
+
+<div class="logo-container">
+     <svg fill="none" height="136"  viewbox="0 0 115 136" width="136"
+     xmlns="http://www.w3.org/2000/svg">
+    <g filter="url(#filter0_d_1_6)">
+        <path class="animate" d="M107.447 0.0193964L103.207 17.5622L90.7955 4.37679L107.447 0.0193964Z" fill="#339966"/>
+        <path class="animate" d="M107.447 0.0193964L103.207 17.5622L90.7955 4.37679L107.447 0.0193964Z" fill="#339966" stroke="none"/>
+        <path class="animate" d="M93.7094 6.94159C93.9007 6.7385 94.2126 6.74028 94.4021 6.94553L100.781 13.8562C100.856 13.9367 100.786 14.0698 100.682 14.0463C100.646 14.0382 100.609 14.0498 100.583 14.0771L85.0963 30.4657L69.1845 47.3899L31.8587 87.3438C31.8417 87.3619 31.8261 87.3814 31.8119 87.4019L29.1551 91.2535L28.3035 92.9341L27.3306 94.7437L25.5074 98.8781L24.037 103.088C23.9712 103.276 24.0157 103.488 24.1509 103.629L26.4057 105.989C26.5367 106.127 26.5829 106.33 26.525 106.515L26.2555 107.375L25.8924 109.052L25.6534 111.759L25.5383 115.495L25.2988 117.944L18.8469 111.832C18.8275 111.814 18.8095 111.794 18.7931 111.773L13.5981 104.972C13.4954 104.837 13.4637 104.658 13.5137 104.493L16.1026 95.9792L18.0477 91.5861L20.115 87.4502L22.3057 83.9574L24.7407 80.5918L29.4911 75.1496L34.4089 69.9639L38.0187 66.0752L46.6681 56.8711L93.7094 6.94159Z" fill="#339966"/>
+        <path class="animate" opacity="0.85" fill-rule="evenodd" clip-rule="evenodd" d="M51.3861 125.217L51.3552 123.808L50.8944 125.158C51.0582 125.179 51.222 125.198 51.3861 125.217ZM14.9879 80.9875C15.4781 83.4609 16.182 85.8718 17.0852 88.1959L16.9472 88.1494L12.5578 101.015C9.05764 95.5243 6.57927 89.3964 5.29548 82.9184C2.90937 70.8782 4.79766 58.3736 10.6386 47.5352C16.4796 36.6969 25.9118 28.1954 37.3281 23.4794C48.744 18.7635 61.4376 18.1246 73.2462 21.6713L65.706 29.5064C62.8708 29.0016 59.9428 28.77 56.9512 28.8394C34.5722 29.3587 16.4894 46.5391 14.3972 68.1977C13.9579 72.4382 14.1478 76.7482 14.9879 80.9875ZM70.3868 30.6097L70.4958 30.642L70.5613 30.4285L70.3868 30.6097Z" fill="#339966"/>
+        <path class="animate" d="M87.3062 35.3123C87.51 35.0933 87.8495 35.1106 88.0327 35.3493L88.548 36.0205L89.6528 37.1359L90.5119 38.2551L91.3712 39.1154L93.3353 41.0911L94.1966 41.9405C94.3971 42.1383 94.4033 42.4714 94.2102 42.677L65.9384 72.7789L50.5818 89.3286L46.6504 93.4027L45.2683 95.0423L42.6271 98.3462C42.6065 98.3719 42.5884 98.3997 42.573 98.4291L40.7526 101.909L39.7695 103.801L39.032 105.69L38.4172 107.706L38.0481 109.718L37.4574 112.461C37.4413 112.536 37.4413 112.614 37.4574 112.689L37.6287 113.485C37.6626 113.643 37.765 113.774 37.905 113.84L39.2743 114.487L40.4079 114.868C40.6103 114.936 40.7477 115.134 40.7476 115.358L40.7467 117.83L40.9934 120.803L41.6086 123.77L41.9557 125.108C41.9694 125.161 41.9918 125.211 42.0217 125.256C42.2732 125.632 41.9178 126.126 41.5067 125.972L39.5204 125.227L35.4684 123.607L31.0484 121.347L27.6064 119.223C27.457 119.131 27.3651 118.962 27.365 118.78L27.3646 117.392L27.4879 114.736L27.6109 112.599L27.9818 109.033L28.5979 106.241L29.4587 103.25L30.1941 100.909L31.1752 98.5636L33.5101 94.1262L35.1689 91.5764L37.319 89.0189L43.8304 81.7974L51.3245 73.5255L59.3099 65.1164L73.8678 49.7442L87.3062 35.3123Z" fill="#46286E"/>
+        <path class="animate" d="M101.717 28.1221L96.8848 45.0532L84.3288 33.042L101.077 28.238L101.717 28.1221Z" fill="#46286E"/>
+        <path class="animate" d="M84.2943 63.7657C86.3088 61.5443 89.7024 61.7564 91.46 64.2137C92.9266 66.2641 92.7117 69.1647 90.9616 70.9439L83.6621 78.3641L69.2484 93.5159C68.7039 94.0883 67.7823 93.6876 67.7672 92.872C67.7632 92.6538 67.6874 92.444 67.553 92.2795L66.5364 91.0346C64.8159 88.9275 64.859 85.7748 66.6364 83.722L75.9216 72.9979L84.2943 63.7657Z" fill="#5D6972"/>
+        <path class="animate" d="M92.9372 73.9895L80.8439 62.2679L96.9971 55.9456L96.6542 57.8749L92.9372 73.9895Z" fill="#5D6972"/>
+        <path class="animate" d="M107.754 85.6843C111.702 73.5977 110.854 59.7016 106.959 48.622L99.5326 54.1993C101.605 60.1396 102.375 66.8414 101.538 73.9274C98.6819 98.1221 79.4779 117.375 55.4842 117.661C53.9857 117.654 52.5163 117.56 51.0796 117.384L46.7663 126.804C48.779 127.14 50.834 127.34 52.9205 127.4C64.4302 127.726 76.1859 123.747 86.1844 116.141C96.1829 108.534 103.806 97.7708 107.754 85.6843Z" fill="#5D6972"/>
+        <path class="animate" d="M82.2477 65.9865C82.4566 65.7695 82.801 65.7853 82.9922 66.0208L83.4877 66.6307L84.5397 67.7161L85.391 68.764L86.2083 69.6024L88.0776 71.5262L88.8763 72.337C89.0779 72.5416 89.0795 72.8768 88.88 73.0818L69.0011 93.5109L59.407 103.508L56.5165 106.36L56.0866 106.865L55.943 107.006L54.718 108.382L53.6956 109.919C53.3277 110.379 53.0203 110.928 52.7913 111.535C52.5368 112.21 52.3851 112.942 52.3468 113.678C52.3086 114.414 52.3846 115.138 52.5697 115.798C52.7547 116.459 53.0443 117.04 53.4182 117.502L53.5073 117.362L53.8292 117.837C53.8734 117.902 53.9313 117.956 53.9985 117.995L54.4272 118.241C54.5005 118.283 54.5825 118.306 54.6662 118.307L60.1001 118.385C60.132 118.386 60.1638 118.383 60.1952 118.377L62.6798 117.921L65.5589 117.701L66.401 117.548L67.2222 117.463C67.4467 117.44 67.6594 117.574 67.7434 117.791L68.2323 119.056C68.26 119.127 68.3026 119.192 68.3571 119.244L69.634 120.48C69.6644 120.509 69.6912 120.542 69.7138 120.578L70.1302 121.245C70.3102 121.533 70.179 121.919 69.8648 122.025L57.8872 126.076L54.9871 126.754L52.2857 127.083C51.9661 127.122 51.6428 127.118 51.3237 127.073L50.1596 126.906C50.061 126.891 49.9878 126.803 49.9891 126.7C49.9906 126.577 49.8867 126.48 49.7683 126.494L47.0673 126.826C47.0077 126.834 46.9474 126.83 46.889 126.815L46.7721 126.786L46.2337 126.641C46.2018 126.632 46.1707 126.62 46.1409 126.605L45.5114 126.289C45.4129 126.24 45.3324 126.159 45.282 126.058L44.3428 124.184C44.3274 124.154 44.3149 124.121 44.3057 124.088L43.6635 121.785L43.1678 119.734L43.0354 118.519L43.0022 117.646L42.9818 115.764L43.0832 113.402L43.3725 111.247L43.7447 109.468L44.2888 107.607C44.2965 107.58 44.3062 107.555 44.3178 107.53L45.6216 104.751L46.6447 102.961L47.5518 101.727L48.5925 100.271L50.2677 98.4716L52.4557 96.2819L57.6934 90.8374L60.5306 88.0942L63.1275 85.3501L73.2691 75.3135L82.2477 65.9865Z" fill="#5D6972"/>
+    </g>
+        <defs>
+            <filter id="filter0_d_1_6" x="0.289368" y="0.0194092" width="114.04" height="135.399" filterunits="userSpaceOnUse" color-interpolation-filters="sRGB">
+                <feflood flood-opacity="0" result="BackgroundImageFix"/>
+                <fecolormatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+                <feoffset dy="4"/>
+                <fegaussianblur stdeviation="2"/>
+                <fecomposite in2="hardAlpha" operator="out"/>
+                <fecolormatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0"/>
+                <feblend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_6"/>
+                <feblend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_6" result="shape"/>
+            </filter>
+        </defs>
+    </svg>
+       <h1 class="title">Profisee Objects</h1>
+     
+</div>
+
+
+"""
+
+# Add the logo to your Streamlit app
+
+st.markdown(cdo_logo,unsafe_allow_html=True)
+
+
+def _set_block_container_style(
+    max_width: int = 1200,
+    max_width_100_percent: bool = True,
+    padding_top: int = 0,
+    padding_right: int = 0,
+    padding_left: int = 0,
+    padding_bottom: int = 0,
+    ):
+    if max_width_100_percent:
+        max_width_str = f"max-width: 100%;"
+    else:
+        max_width_str = f"max-width: {max_width}px;"
+        
+    styl = f"""
+    <style>
+        .reportview-container .main .block-container{{
+            {max_width_str}
+            padding-top: {padding_top}rem;
+            padding-right: {padding_right}rem;
+            padding-left: {padding_left}rem;
+            padding-bottom: {padding_bottom}rem;
+        }}
+        }}
+    </style>
+    """
+    st.markdown(styl, unsafe_allow_html=True)
+
+
+def _set_st_app_style(
+    header_bg_color: str = "transparent",
+    select_div_bg_color: str = "transparent",
+    select_div_width: str = "100%",
+    data_frame_bg_color: str = "transparent",
+    data_frame_width: str = "100%",
+    data_frame_border: str = "1px solid #0f1532",
+    data_frame_border_radius: str = "4px",
+    data_frame_padding: str = "2px",
+    data_frame_margin: str = "10px",
+    data_frame_font_size: str = "10px",
+    data_frame_font_color: str = "#333",
+    font_family: str = "-apple-system, BlinkMacSystemFont, sans-serif",
+    gradient_colors: str = "#4c234a, #0f1532",
+    height: str = "100vh",
+    width: str = "100vw",
+    box_shadow: str = "0 4px 8px rgba(0, 0, 0, 0.2)",
+    transition: str = "all 0.3s ease",
+    text_color: str = "#ffffff",
+    radial_gradient_color: str = "rgba(255,255,255,0.1)",
+    radial_gradient_size_1: str = "50px 50px",
+    radial_gradient_size_2: str = "100px 100px",
+    star_animation_duration_1: str = "30s",
+    star_animation_duration_2: str = "60s",
+    opacity_1: float = 0.5,
+    opacity_2: float = 0.3,
+    padding_top: int = 0,
+    padding_right: int = 0,
+    padding_left: int = 0,
+    padding_bottom: int = 0,
+    ):
+    styl = f"""
+    <style>
+        .stApp > header {{
+            background-color: {header_bg_color};
+        }}
+
+        div[data-baseweb="select"] > div {{
+            background-color: {select_div_bg_color};
+            width: {select_div_width};
+            padding-top: {padding_top}rem;
+            padding-right: {padding_right}rem;
+            padding-left: {padding_left}rem;
+            padding-bottom: {padding_bottom}rem;
+        }}
+        
+        div[data-testid="stDataFrame"] {{
+            background-color: {data_frame_bg_color};
+            width: {data_frame_width};
+            border: {data_frame_border};
+            border-radius: {data_frame_border_radius};
+            padding: {data_frame_padding};
+            margin: {data_frame_margin};
+            font-size: {data_frame_font_size};
+            color: {data_frame_font_color};
+        }}
+        .stApp {{
+            margin: fixed;
+            font-family: {font_family};
+            overflow: None;
+            background: linear-gradient(to top, {gradient_colors});
+            animation: gradient 15s ease infinite;
+            height: {height};
+            width: {width};
+            background-attachment: fixed;
+            box-shadow: {box_shadow};
+            transition: {transition};
+            color: {text_color}; /* Ensuring text is readable */
+        }}
+
+        .stApp::before, .stApp::after {{
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            background: transparent;
+        }}
+
+        .stApp::before {{
+            background: radial-gradient(circle, {radial_gradient_color} 1px, transparent 1px);
+            background-size: {radial_gradient_size_1};
+            animation: stars {star_animation_duration_1} linear infinite;
+            opacity: {opacity_1};
+        }}
+
+        .stApp::after {{
+            background: radial-gradient(circle, {radial_gradient_color} 2px, transparent 2px);
+            background-size: {radial_gradient_size_2};
+            animation: stars {star_animation_duration_2} linear infinite;
+            opacity: {opacity_2};
+        }}
+
+        @keyframes stars {{
+            from {{
+                transform: translateY(0);
+            }}
+            to {{
+                transform: translateY(-200%);
+            }}
+        }}
+    </style>
+    """
+    st.markdown(styl, unsafe_allow_html=True)
+
+_set_st_app_style()
+_set_block_container_style()
+
+#-------------------------------------------------------------------------------------------
 @dataclass
 class ETFData:
     ticker: str
