@@ -101,12 +101,12 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 #-------------------------------------------------------------------------------------------
 app_title = "ETF EXPLORER"
-cdo_logo = f"""
-<style>
-@keyframes fadeInSlideIn {
+cdo_logo = f
+    """<style>
+    @keyframes fadeInSlideIn {
     0% { opacity: 0; transform: translateY(-20px); }
     100% { opacity: 1; transform: translateY(0); }
-}
+    }
 .logo-container {
     display: flex;
     align-items: center;
