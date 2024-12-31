@@ -100,6 +100,7 @@ body {
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 #-------------------------------------------------------------------------------------------
+app_title = "ETF EXPLORER"
 cdo_logo = """ 
 
 <style>
@@ -154,12 +155,12 @@ cdo_logo = """
             </filter>
         </defs>
     </svg>
-       <h1 class="title">Profisee Objects</h1>
+       <h1 class="title">{}</h1>
      
 </div>
 
 
-"""
+""".format(app_title)
 
 # Add the logo to your Streamlit app
 
@@ -724,7 +725,6 @@ def export_dialog(data):
                 on_click=lambda: st.session_state.pop("export_dialog", None)
             )
 def main() -> None:
-    st.title("📈 ETF Explorer Pro")
     st.markdown("Explore the Complete list of US ETF's")
 
     with st.spinner("Loading ETF data..."):
