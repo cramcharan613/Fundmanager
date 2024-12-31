@@ -155,7 +155,7 @@ cdo_logo = """
             </filter>
         </defs>
     </svg>
-       <h1 class="title">{}</h1>
+       <h1 class="title">{0}</h1>
      
 </div>
 
