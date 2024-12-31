@@ -240,6 +240,7 @@ def _set_st_app_style(
     .stHorizontalBlock.st-emotion-cache-ocqkz7.eiemyj0 {{
           display: flex;
          align-items: center; 
+            flex-direction: row-reverse;
   gap: 10px; 
 }}
 
