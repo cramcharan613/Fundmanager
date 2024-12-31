@@ -237,6 +237,18 @@ def _set_st_app_style(
         .stApp > header {{
             background-color: {header_bg_color};
         }}
+    .stHorizontalBlock.st-emotion-cache-ocqkz7.eiemyj0 {{
+          display: flex;
+         align-items: center; 
+  gap: 10px; 
+}}
+
+.stHorizontalBlock.st-emotion-cache-ocqkz7.eiemyj0 .stColumn {{
+  display: flex; 
+  align-items: center; 
+}}
+
+
         
         /* Select Box Styling */
         div[data-baseweb="select"] > div {{
