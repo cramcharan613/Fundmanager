@@ -96,16 +96,6 @@ body {
 
 
 
-
-.stHorizontalBlock.st-emotion-cache-ocqkz7.eiemyj0 .stColumn {
-    
-  align-items: center;
-  flex-direction: row-reverse;
-  gap: 10px;
-  display: flex;
-  align-items: center;
-}
-
 /* Multi-select fixes */
 .stApp .stMultiSelect > div {
   pointer-events: auto !important;
