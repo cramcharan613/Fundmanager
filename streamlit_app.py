@@ -93,6 +93,26 @@ body {
     --ag-odd-row-background-color: var(--background-color);
     --ag-row-hover-color: rgba(33, 150, 243, 0.1);
 }
+
+
+
+/* Horizontal block alignment */
+.stHorizontalBlock.st-emotion-cache-ocqkz7.eiemyj0 {
+  display: flex;
+  align-items: center;
+  flex-direction: row-reverse;
+  gap: 10px;
+}
+
+.stHorizontalBlock.st-emotion-cache-ocqkz7.eiemyj0 .stColumn {
+  display: flex;
+  align-items: center;
+}
+
+/* Multi-select fixes */
+.stApp .stMultiSelect > div {
+  pointer-events: auto !important;
+}
 </style>
 """, unsafe_allow_html=True)
 #-------------------------------------------------------------------------------------------
@@ -198,7 +218,6 @@ def _set_block_container_style(
     st.markdown(styl, unsafe_allow_html=True)
 
 
-import streamlit as st
 
 def _set_st_app_style(
     header_bg_color: str = "transparent",
@@ -237,18 +256,7 @@ def _set_st_app_style(
         .stApp > header {{
             background-color: {header_bg_color};
         }}
-    .stHorizontalBlock.st-emotion-cache-ocqkz7.eiemyj0 {{
-          display: flex;
-         align-items: center; 
-            flex-direction: row-reverse;
-  gap: 10px; 
-}}
-
-.stHorizontalBlock.st-emotion-cache-ocqkz7.eiemyj0 .stColumn {{
-  display: flex; 
-  align-items: center; 
-}}
-
+        
 
         
         /* Select Box Styling */
