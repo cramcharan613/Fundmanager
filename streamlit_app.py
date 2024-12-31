@@ -96,15 +96,12 @@ body {
 
 
 
-/* Horizontal block alignment */
-.stHorizontalBlock.st-emotion-cache-ocqkz7.eiemyj0 {
-  display: flex;
+
+.stHorizontalBlock.st-emotion-cache-ocqkz7.eiemyj0 .stColumn {
+    
   align-items: center;
   flex-direction: row-reverse;
   gap: 10px;
-}
-
-.stHorizontalBlock.st-emotion-cache-ocqkz7.eiemyj0 .stColumn {
   display: flex;
   align-items: center;
 }
