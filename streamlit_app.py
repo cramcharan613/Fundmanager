@@ -38,7 +38,7 @@ class S3Service:
         self.s3_client =  boto3.client(service_name='s3',
                 aws_access_key_id=st.secrets["AWS_ACCESS_KEY_ID"],
             aws_secret_access_key=st.secrets["AWS_SECRET_ACCESS_KEY"],
-                  region_name='us-west-2',
+                  region_name=["AWS_DEFAULT_REGION"],
                   verify=False)
         self.bucket = "cetera-finance-1"
         self.prefix = "daily_etf_ts"
