@@ -25,10 +25,6 @@ st.set_page_config(
     page_icon="📈"
 )
 
-
-
-
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -37,31 +33,25 @@ class S3Service:
         try:
             self.s3_client = boto3.client(
                 service_name='s3',
-                aws_access_key_id=self._get_secret_value("AWS_ACCESS_KEY_ID"),
-                aws_secret_access_key=self._get_secret_value("AWS_SECRET_ACCESS_KEY"),
-                region_name=self._get_secret_value("AWS_DEFAULT_REGION", "us-west-2"),
+                aws_access_key_id=st.secrets.get("AWS_ACCESS_KEY_ID"),
+                aws_secret_access_key=st.secrets.get("AWS_SECRET_ACCESS_KEY"),
+                region_name=st.secrets.get("AWS_DEFAULT_REGION"),
                 verify=False
-        )
+            )
             self.bucket = "cetera-finance-1"
             self.prefix = "daily_etf_ts"
             self._ensure_bucket_exists()
         except Exception as e:
-            st.error(f"Failed to initialize S3 client: {str(e)}")
-            raise
+            logger.error(f"Failed to initialize S3 client: {str(e)}")
+            st.error("Failed to connect to S3. Please check your AWS credentials.")
+            self.s3_client = None
 
-def _get_secret_value(self, key, default=None):
-    """Safely get a secret value and ensure it's a string."""
-    try:
-        value = st.secrets.get(key, default)
-        if isinstance(value, list):
-            return str(value[0]) if value else ""
-        return str(value) if value is not None else (default or "")
-    except Exception as e:
-        st.error(f"Error getting secret {key}: {str(e)}")
-        return default if default is not None else ""
     def _ensure_bucket_exists(self):
         """Check if bucket exists and create if it doesn't"""
         try:
+            if self.s3_client is None:
+                return
+
             self.s3_client.head_bucket(Bucket=self.bucket)
             logger.info(f"Bucket {self.bucket} exists")
         except ClientError as e:
@@ -83,26 +73,30 @@ def _get_secret_value(self, key, default=None):
                     logger.info(f"Successfully created bucket {self.bucket}")
                 except Exception as create_error:
                     logger.error(f"Failed to create bucket: {str(create_error)}")
-                    raise
+                    st.warning("Unable to create S3 bucket. Continuing without S3 storage.")
             else:
                 logger.error(f"Error checking bucket: {str(e)}")
-                raise
+                st.warning("Unable to access S3 bucket. Continuing without S3 storage.")
 
     def auto_save_to_s3(self, df: pl.DataFrame) -> None:
         """Automatically save DataFrame to S3"""
         try:
+            if self.s3_client is None:
+                return
+
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             key = f"{self.prefix}/etf_data_{timestamp}.csv"
-            
+
             csv_buffer = StringIO()
             df.write_csv(csv_buffer)
-            
+
             self.s3_client.put_object(
                 Bucket=self.bucket,
                 Key=key,
                 Body=csv_buffer.getvalue(),
                 ContentType='text/csv'
             )
+
             
             logger.info(f"Successfully saved data to S3: s3://{self.bucket}/{key}")
             
