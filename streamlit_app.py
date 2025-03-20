@@ -33,9 +33,22 @@ class S3Service:
         try:
             self.s3_client = boto3.client(
                 service_name='s3',
-                aws_access_key_id=st.secrets.get("AWS_ACCESS_KEY_ID"),
-                aws_secret_access_key=st.secrets.get("AWS_SECRET_ACCESS_KEY"),
-                region_name=st.secrets.get("AWS_DEFAULT_REGION"),
+                aws_access_key_id=st.text_input(
+                "AWS Access Key ID",
+                type="password",
+                help="Enter your AWS Access Key ID"
+            ),
+                aws_secret_access_key=st.sidebar.text_input(
+                "AWS Secret Access Key",
+                type="password",
+                help="Enter your AWS Secret Access Key"
+            )
+            ,
+                region_name=st.text_input(
+                "AWS Region",
+                value="us-west-2",
+                help="Enter AWS Region (default: us-west-2)"
+            ),
                 verify=False
             )
             self.bucket = "cetera-finance-1"
