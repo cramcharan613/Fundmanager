@@ -1,3 +1,5 @@
+#%%writefile app.py
+
 import asyncio
 from typing import Dict, Optional, Any
 from datetime import datetime
@@ -5,18 +7,95 @@ import logging
 import streamlit as st
 from st_aggrid import AgGrid, DataReturnMode, GridUpdateMode, JsCode, GridOptionsBuilder
 import pandas as pd
+import polars as pl
 import io
 import xlsxwriter
 import aiohttp
 from functools import lru_cache
 import concurrent.futures
 from dataclasses import dataclass
+from io import StringIO
 
+import logging
+import boto3
+from botocore.exceptions import ClientError
 st.set_page_config(
     layout="wide",
     page_title="ETF Explorer Pro",
     page_icon="📈"
 )
+
+
+
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+class S3Service:
+    def __init__(self):
+        self.s3_client =  boto3.client(service_name='s3',
+                aws_access_key_id=st.secrets["AWS_ACCESS_KEY_ID"],
+            aws_secret_access_key=st.secrets["AWS_SECRET_ACCESS_KEY"],
+                  region_name='us-west-2',
+                  verify=False)
+        self.bucket = "cetera-finance-1"
+        self.prefix = "daily_etf_ts"
+        self._ensure_bucket_exists()
+
+    def _ensure_bucket_exists(self):
+        """Check if bucket exists and create if it doesn't"""
+        try:
+            self.s3_client.head_bucket(Bucket=self.bucket)
+            logger.info(f"Bucket {self.bucket} exists")
+        except ClientError as e:
+            error_code = int(e.response['Error']['Code'])
+            if error_code == 404:
+                try:
+                    logger.info(f"Creating bucket {self.bucket}")
+                    if self.s3_client.meta.region_name == 'us-east-1':
+                        self.s3_client.create_bucket(
+                            Bucket=self.bucket
+                        )
+                    else:
+                        self.s3_client.create_bucket(
+                            Bucket=self.bucket,
+                            CreateBucketConfiguration={
+                                'LocationConstraint': 'us-west-2'
+                            }
+                        )
+                    logger.info(f"Successfully created bucket {self.bucket}")
+                except Exception as create_error:
+                    logger.error(f"Failed to create bucket: {str(create_error)}")
+                    raise
+            else:
+                logger.error(f"Error checking bucket: {str(e)}")
+                raise
+
+    def auto_save_to_s3(self, df: pl.DataFrame) -> None:
+        """Automatically save DataFrame to S3"""
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            key = f"{self.prefix}/etf_data_{timestamp}.csv"
+            
+            csv_buffer = StringIO()
+            df.write_csv(csv_buffer)
+            
+            self.s3_client.put_object(
+                Bucket=self.bucket,
+                Key=key,
+                Body=csv_buffer.getvalue(),
+                ContentType='text/csv'
+            )
+            
+            logger.info(f"Successfully saved data to S3: s3://{self.bucket}/{key}")
+            
+        except Exception as e:
+            logger.error(f"Error saving to S3: {str(e)}")
+            raise
+
+
+
 
 # Custom CSS#-------------------------------------------------------------------------------------------
 st.markdown("""
@@ -432,11 +511,29 @@ class CachedETFDataFetcher:
         return df
 
 @st.cache_data(ttl=3600)
-def load_data() -> pd.DataFrame:
+def load_data() -> pl.DataFrame:
     fetcher = CachedETFDataFetcher()
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    return loop.run_until_complete(fetcher.fetch_data())
+    # Convert pandas DataFrame to Polars
+    pandas_df = loop.run_until_complete(fetcher.fetch_data())
+    return pl.from_pandas(pandas_df)
+
+def save_to_s3(df: pl.DataFrame, bucket: str, key: str):
+    """Save DataFrame to S3 bucket"""
+    try:
+        s3_client = boto3.client('s3')
+        csv_buffer = StringIO()
+        df.write_csv(csv_buffer)
+        s3_client.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=csv_buffer.getvalue()
+        )
+        return True
+    except Exception as e:
+        st.error(f"Error saving to S3: {str(e)}")
+        return False
 
 class ETF:
     def __init__(self, data: Dict[str, str]):
@@ -521,12 +618,17 @@ def configure_grid(df: pd.DataFrame, group_by_column: Optional[str] = None) -> D
         sortable=True,
         filter=True,
         resizable=True,
+        sizeColumnsToFit=True,
+        enableRowGroup=True,
+        enablePivot=True,
+        enableValue=True,
         wrapHeaderText=True,
         autoHeaderLabel=True,
         autoHeaderTooltip=True,
         autoHeaderCellFilter=True,
         autoHeaderCellRenderer=True,
         autoHeaderHeight=True,
+        autoSizeColumns=True,
         filterParams={
             'filterOptions': [
                 'equals', 'notEqual', 'contains',
@@ -779,67 +881,85 @@ def export_dialog(data):
                 on_click=lambda: st.session_state.pop("export_dialog", None)
             )
 def main() -> None:
-    with st.spinner("Loading ETF data..."):
-        etf_data = load_data()
-    if etf_data.empty:
-        st.error("No data available.")
-        return
-
-    col1, col2 = st.columns([1, 9])
-
-    with col1:
-        issuers = sorted(etf_data['ETF_ISSUER'].dropna().unique().tolist())
-        selected_issuer = st.selectbox("Filter by ETF Issuer", ["All"] + issuers, index=0)
-
-        asset_classes = sorted(etf_data['ASSET_CLASS'].dropna().unique().tolist())
-        selected_asset_class = st.selectbox("Filter by Asset Class", ["All"] + asset_classes, index=0)
-
-        numeric_aum = etf_data['ASSETS_UNDER_MANAGEMENT'].str.replace('$', '', regex=False).str.replace(',', '', regex=False).str.replace('M', '')
-        numeric_aum = pd.to_numeric(numeric_aum, errors='coerce')
-        max_aum = int(numeric_aum.max()) if numeric_aum.notnull().any() else 0
-        min_aum = st.slider("Min AUM ($M)", min_value=0, max_value=max_aum, value=0)
-
-    filtered_data = etf_data.copy()
-    if selected_issuer != "All":
-        filtered_data = filtered_data[filtered_data['ETF_ISSUER'] == selected_issuer]
-    if selected_asset_class != "All":
-        filtered_data = filtered_data[filtered_data['ASSET_CLASS'] == selected_asset_class]
-
-    numeric_filtered_aum = filtered_data['ASSETS_UNDER_MANAGEMENT'].str.replace('$', '', regex=False).str.replace(',', '', regex=False).str.replace('M', '')
-    numeric_filtered_aum = pd.to_numeric(numeric_filtered_aum, errors='coerce')
-    filtered_data = filtered_data[numeric_filtered_aum >= min_aum]
-
-    with col2:
-        final_grid_options, custom_css = configure_grid(filtered_data, group_by_column=None)
+    try:
+        s3_service = S3Service()
         
-        col3, col4 = st.columns([1, 9])
-        with col3:
-            quick_search = st.text_input("Global Quick Search", value="", help="Type to filter all columns globally")
-       
-            if quick_search:
-                final_grid_options["quickFilterText"] = quick_search
-      
-        response = AgGrid(
-            filtered_data,
-            gridOptions=final_grid_options,
-           
-            enable_enterprise_modules=True,
-            update_mode=GridUpdateMode.MODEL_CHANGED,
-            data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
-            fit_columns_on_grid_load=True,
-            width='100%',
-            height=1500,
-            allow_unsafe_jscode=True,
-            theme='streamlit',
-            enable_quicksearch=True,
-            reload_data=True
-        )
-        with col4:
-            if st.button("Export Data"):
-                export_dialog(pd.DataFrame(response['data']))
-       
-        # Trigger modal for export options
+        with st.spinner("Loading ETF data..."):
+            etf_data = load_data()
+            # Automatically save as soon as data is loaded
+            s3_service.auto_save_to_s3(etf_data)
+            
+            if etf_data.height == 0:  # Correct way to check if Polars DataFrame is empty
+                st.error("No data available.")
+                return
 
-  
+        col1, col2 = st.columns([1, 9])
+
+        with col1:
+            # Convert to pandas for these operations or use Polars equivalent
+            etf_data_pd = etf_data.to_pandas()
+            
+            issuers = sorted(etf_data_pd['ETF_ISSUER'].dropna().unique().tolist())
+            selected_issuer = st.selectbox("Filter by ETF Issuer", ["All"] + issuers, index=0)
+
+            asset_classes = sorted(etf_data_pd['ASSET_CLASS'].dropna().unique().tolist())
+            selected_asset_class = st.selectbox("Filter by Asset Class", ["All"] + asset_classes, index=0)
+
+            # Clean and convert AUM values
+            numeric_aum = (etf_data_pd['ASSETS_UNDER_MANAGEMENT']
+                         .str.replace('$', '', regex=False)
+                         .str.replace(',', '', regex=False)
+                         .str.replace('M', '', regex=False))
+            numeric_aum = pd.to_numeric(numeric_aum, errors='coerce')
+            max_aum = int(numeric_aum.max()) if numeric_aum.notnull().any() else 0
+            min_aum = st.slider("Min AUM ($M)", min_value=0, max_value=max_aum, value=0)
+
+        # Filter data
+        filtered_data = etf_data_pd.copy()
+        if selected_issuer != "All":
+            filtered_data = filtered_data[filtered_data['ETF_ISSUER'] == selected_issuer]
+        if selected_asset_class != "All":
+            filtered_data = filtered_data[filtered_data['ASSET_CLASS'] == selected_asset_class]
+
+        numeric_filtered_aum = (filtered_data['ASSETS_UNDER_MANAGEMENT']
+                              .str.replace('$', '', regex=False)
+                              .str.replace(',', '', regex=False)
+                              .str.replace('M', '', regex=False))
+        numeric_filtered_aum = pd.to_numeric(numeric_filtered_aum, errors='coerce')
+        filtered_data = filtered_data[numeric_filtered_aum >= min_aum]
+
+        with col2:
+            final_grid_options, custom_css = configure_grid(filtered_data, group_by_column=None)
+            
+            col3, col4 = st.columns([1, 9])
+            with col3:
+                quick_search = st.text_input("Global Quick Search", value="", help="Type to filter all columns globally")
+           
+                if quick_search:
+                    final_grid_options["quickFilterText"] = quick_search
+          
+            response = AgGrid(
+                filtered_data,
+                gridOptions=final_grid_options,
+                enable_enterprise_modules=True,
+                update_mode=GridUpdateMode.MODEL_CHANGED,
+                data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
+                fit_columns_on_grid_load=True,
+                width='100%',
+                height=1500,
+                allow_unsafe_jscode=True,
+                theme='streamlit',
+                enable_quicksearch=True,
+                reload_data=True
+            )
+            
+            with col4:
+                if st.button("Export Data"):
+                    export_dialog(pd.DataFrame(response['data']))
+
+    except Exception as e:
+        logger.error(f"Application error: {str(e)}")
+        st.error(f"An error occurred: {str(e)}")
+        
 if __name__ == "__main__":
     main()
