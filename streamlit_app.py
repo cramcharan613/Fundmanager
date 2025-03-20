@@ -18,7 +18,7 @@ from io import StringIO
 import boto3
 from botocore.exceptions import ClientError
 # Load environment variables
-load_dotenv()
+
 
 st.set_page_config(
     layout="wide",
