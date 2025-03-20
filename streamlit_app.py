@@ -1,4 +1,3 @@
-#%%writefile app.py
 
 import asyncio
 from typing import Dict, Optional, Any
