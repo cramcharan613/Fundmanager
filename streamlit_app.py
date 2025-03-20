@@ -954,18 +954,14 @@ def main() -> None:
         # Initialize S3 Service
         s3_service = S3Service()
         
-        # Load and process data
+        if st.sidebar.button("Configure S3"):
+            s3_service.configure_s3()
+        
+       
+  
         with st.spinner("Loading ETF data..."):
             etf_data = load_data()
-            
-            # Only try to save if we have a valid S3 client
-            if s3_service.s3_client is not None:
-                try:
-                    s3_service.auto_save_to_s3(etf_data)
-                    s3_service.configure_s3()
-                except Exception as e:
-                    st.warning(f"Unable to save to S3: {str(e)}")
-                    
+              
             # Continue with the rest of your application...
       
             if etf_data.height == 0:  # Correct way to check if Polars DataFrame is empty
