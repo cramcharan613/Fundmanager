@@ -962,7 +962,7 @@ def main() -> None:
             if s3_service.s3_client is not None:
                 try:
                     s3_service.auto_save_to_s3(etf_data)
-                     s3_service.configure_s3()
+                    s3_service.configure_s3()
                 except Exception as e:
                     st.warning(f"Unable to save to S3: {str(e)}")
                     
