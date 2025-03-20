@@ -35,15 +35,31 @@ logger = logging.getLogger(__name__)
 
 class S3Service:
     def __init__(self):
-        self.s3_client =  boto3.client(service_name='s3',
-                aws_access_key_id=st.secrets["AWS_ACCESS_KEY_ID"],
-            aws_secret_access_key=st.secrets["AWS_SECRET_ACCESS_KEY"],
-                  region_name=["AWS_DEFAULT_REGION"],
-                  verify=False)
-        self.bucket = "cetera-finance-1"
-        self.prefix = "daily_etf_ts"
-        self._ensure_bucket_exists()
+        try:
+            self.s3_client = boto3.client(
+                service_name='s3',
+                aws_access_key_id=self._get_secret_value("AWS_ACCESS_KEY_ID"),
+                aws_secret_access_key=self._get_secret_value("AWS_SECRET_ACCESS_KEY"),
+                region_name=self._get_secret_value("AWS_DEFAULT_REGION", "us-west-2"),
+                verify=False
+        )
+            self.bucket = "cetera-finance-1"
+            self.prefix = "daily_etf_ts"
+            self._ensure_bucket_exists()
+        except Exception as e:
+            st.error(f"Failed to initialize S3 client: {str(e)}")
+            raise
 
+def _get_secret_value(self, key, default=None):
+    """Safely get a secret value and ensure it's a string."""
+    try:
+        value = st.secrets.get(key, default)
+        if isinstance(value, list):
+            return str(value[0]) if value else ""
+        return str(value) if value is not None else (default or "")
+    except Exception as e:
+        st.error(f"Error getting secret {key}: {str(e)}")
+        return default if default is not None else ""
     def _ensure_bucket_exists(self):
         """Check if bucket exists and create if it doesn't"""
         try:
