@@ -954,7 +954,7 @@ def main() -> None:
         # Initialize S3 Service
         s3_service = S3Service()
         
-        if st.sidebar.button("Configure S3"):
+        if st.button("Configure S3"):
             s3_service.configure_s3()
         
        
