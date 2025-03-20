@@ -904,7 +904,7 @@ def export_dialog(data):
                 on_click=lambda: st.session_state.pop("export_dialog", None)
             )
 def main() -> None:
-      try:
+    try:
         # Initialize S3 Service
         s3_service = S3Service()
         
