@@ -1,5 +1,6 @@
 .streamlit/secrets.toml
-
+.Fundmanager/secrets.toml
+secrets.toml
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
