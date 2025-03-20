@@ -7,5 +7,6 @@ urllib3
 openpyxl
 xlsxwriter
 aiohttp
-
+polars
+boto3
 streamlit_javascript
