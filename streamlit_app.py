@@ -15,11 +15,6 @@ from functools import lru_cache
 import concurrent.futures
 from dataclasses import dataclass
 from io import StringIO
-from dotenv import load_dotenv
-import os
-
-
-import logging
 import boto3
 from botocore.exceptions import ClientError
 # Load environment variables
