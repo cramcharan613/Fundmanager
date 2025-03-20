@@ -25,57 +25,101 @@ st.set_page_config(
     page_icon="📈"
 )
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
+
+@st.cache_resource
 class S3Service:
     def __init__(self):
-        try:
-            self.s3_client = boto3.client(
-                service_name='s3',
-                aws_access_key_id=st.text_input(
-                "AWS Access Key ID",
-                type="password",
-                help="Enter your AWS Access Key ID"
-            ),
-                aws_secret_access_key=st.sidebar.text_input(
-                "AWS Secret Access Key",
-                type="password",
-                help="Enter your AWS Secret Access Key"
-            )
-            ,
-                region_name=st.text_input(
-                "AWS Region",
-                value="us-west-2",
-                help="Enter AWS Region (default: us-west-2)"
-            ),
-                verify=False
-            )
-            self.bucket = "cetera-finance-1"
-            self.prefix = "daily_etf_ts"
-            self._ensure_bucket_exists()
-        except Exception as e:
-            logger.error(f"Failed to initialize S3 client: {str(e)}")
-            st.error("Failed to connect to S3. Please check your AWS credentials.")
-            self.s3_client = None
+        self.s3_client = None
+        self.bucket = "cetera-finance-1"
+        self.prefix = "daily_etf_ts"
+        
+    @st.dialog("S3 Configuration and Log")
+    def configure_s3(self):
+        """Dialog for S3 configuration and logging"""
+        with st.container():
+            st.subheader("AWS S3 Configuration")
+            
+            # Create columns for better layout
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                aws_access_key = st.text_input(
+                    "AWS Access Key ID",
+                    type="password",
+                    help="Enter your AWS Access Key ID"
+                )
+                
+                aws_secret_key = st.text_input(
+                    "AWS Secret Access Key",
+                    type="password",
+                    help="Enter your AWS Secret Access Key"
+                )
+                
+                aws_region = st.text_input(
+                    "AWS Region",
+                    value="us-west-2",
+                    help="Enter AWS Region (default: us-west-2)"
+                )
+            
+            with col2:
+                st.markdown("### Connection Status")
+                status_placeholder = st.empty()
+                
+                # Initialize connection button
+                if st.button("Connect to S3"):
+                    try:
+                        self.s3_client = boto3.client(
+                            service_name='s3',
+                            aws_access_key_id=aws_access_key,
+                            aws_secret_access_key=aws_secret_key,
+                            region_name=aws_region,
+                            verify=False
+                        )
+                        self._ensure_bucket_exists()
+                        status_placeholder.success("✅ Successfully connected to S3")
+                    except Exception as e:
+                        status_placeholder.error(f"❌ Connection failed: {str(e)}")
+                        self.s3_client = None
+            
+            # Add logging section
+            st.markdown("### S3 Operations Log")
+            log_container = st.container()
+            
+            # Create expander for bucket operations
+            with st.expander("Bucket Operations", expanded=False):
+                if st.button("List Buckets"):
+                    try:
+                        if self.s3_client:
+                            response = self.s3_client.list_buckets()
+                            buckets = [bucket['Name'] for bucket in response['Buckets']]
+                            st.write("Available buckets:", buckets)
+                        else:
+                            st.warning("No S3 connection available")
+                    except Exception as e:
+                        st.error(f"Failed to list buckets: {str(e)}")
+                
+                if st.button("Check Current Bucket"):
+                    self._ensure_bucket_exists()
 
     def _ensure_bucket_exists(self):
         """Check if bucket exists and create if it doesn't"""
         try:
             if self.s3_client is None:
+                st.warning("No S3 connection available")
                 return
 
             self.s3_client.head_bucket(Bucket=self.bucket)
+            st.success(f"✅ Bucket {self.bucket} exists")
             logger.info(f"Bucket {self.bucket} exists")
+            
         except ClientError as e:
             error_code = int(e.response['Error']['Code'])
             if error_code == 404:
                 try:
-                    logger.info(f"Creating bucket {self.bucket}")
+                    st.info(f"Creating bucket {self.bucket}...")
                     if self.s3_client.meta.region_name == 'us-east-1':
-                        self.s3_client.create_bucket(
-                            Bucket=self.bucket
-                        )
+                        self.s3_client.create_bucket(Bucket=self.bucket)
                     else:
                         self.s3_client.create_bucket(
                             Bucket=self.bucket,
@@ -83,41 +127,43 @@ class S3Service:
                                 'LocationConstraint': 'us-west-2'
                             }
                         )
+                    st.success(f"✅ Successfully created bucket {self.bucket}")
                     logger.info(f"Successfully created bucket {self.bucket}")
                 except Exception as create_error:
+                    st.error(f"Failed to create bucket: {str(create_error)}")
                     logger.error(f"Failed to create bucket: {str(create_error)}")
-                    st.warning("Unable to create S3 bucket. Continuing without S3 storage.")
             else:
+                st.error(f"Error checking bucket: {str(e)}")
                 logger.error(f"Error checking bucket: {str(e)}")
-                st.warning("Unable to access S3 bucket. Continuing without S3 storage.")
 
     def auto_save_to_s3(self, df: pl.DataFrame) -> None:
         """Automatically save DataFrame to S3"""
         try:
             if self.s3_client is None:
+                st.warning("No S3 connection available")
                 return
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             key = f"{self.prefix}/etf_data_{timestamp}.csv"
 
-            csv_buffer = StringIO()
-            df.write_csv(csv_buffer)
+            with st.spinner("Saving to S3..."):
+                csv_buffer = StringIO()
+                df.write_csv(csv_buffer)
 
-            self.s3_client.put_object(
-                Bucket=self.bucket,
-                Key=key,
-                Body=csv_buffer.getvalue(),
-                ContentType='text/csv'
-            )
+                self.s3_client.put_object(
+                    Bucket=self.bucket,
+                    Key=key,
+                    Body=csv_buffer.getvalue(),
+                    ContentType='text/csv'
+                )
 
-            
-            logger.info(f"Successfully saved data to S3: s3://{self.bucket}/{key}")
-            
+                st.success(f"✅ Successfully saved data to S3: s3://{self.bucket}/{key}")
+                logger.info(f"Successfully saved data to S3: s3://{self.bucket}/{key}")
+
         except Exception as e:
+            st.error(f"Error saving to S3: {str(e)}")
             logger.error(f"Error saving to S3: {str(e)}")
             raise
-
-
 
 
 # Custom CSS#-------------------------------------------------------------------------------------------
@@ -916,6 +962,7 @@ def main() -> None:
             if s3_service.s3_client is not None:
                 try:
                     s3_service.auto_save_to_s3(etf_data)
+                     s3_service.configure_s3()
                 except Exception as e:
                     st.warning(f"Unable to save to S3: {str(e)}")
                     
